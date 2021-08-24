@@ -34,7 +34,7 @@ describe('ReactDOMFizzServer', () => {
     React = require('react');
     ReactDOM = require('react-dom');
     if (__EXPERIMENTAL__) {
-      ReactDOMFizzServer = require('react-dom/unstable-fizz');
+      ReactDOMFizzServer = require('react-dom/server');
     }
     Stream = require('stream');
     Suspense = React.Suspense;
@@ -1446,5 +1446,36 @@ describe('ReactDOMFizzServer', () => {
     );
 
     expect(loggedErrors).toEqual([theError]);
+  });
+
+  // @gate experimental
+  it('should be able to abort the fallback if the main content finishes first', async () => {
+    await act(async () => {
+      const {startWriting} = ReactDOMFizzServer.pipeToNodeWritable(
+        <Suspense fallback={<Text text="Loading Outer" />}>
+          <div>
+            <Suspense
+              fallback={
+                <div>
+                  <AsyncText text="Loading" />
+                  Inner
+                </div>
+              }>
+              <AsyncText text="Hello" />
+            </Suspense>
+          </div>
+        </Suspense>,
+        writable,
+      );
+      startWriting();
+    });
+    expect(getVisibleChildren(container)).toEqual('Loading Outer');
+    // We should have received a partial segment containing the a partial of the fallback.
+    expect(container.innerHTML).toContain('Inner');
+    await act(async () => {
+      resolveText('Hello');
+    });
+    // We should've been able to display the content without waiting for the rest of the fallback.
+    expect(getVisibleChildren(container)).toEqual(<div>Hello</div>);
   });
 });

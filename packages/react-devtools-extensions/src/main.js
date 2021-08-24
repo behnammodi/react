@@ -139,6 +139,8 @@ function createPanelIfReactLoaded() {
           isProfiling,
           supportsReloadAndProfile: isChrome,
           supportsProfiling,
+          // At this time, the scheduling profiler can only parse Chrome performance profiles.
+          supportsSchedulingProfiler: isChrome,
           supportsTraceUpdates: true,
         });
         store.profilerStore.profilingData = profilingData;
@@ -207,21 +209,26 @@ function createPanelIfReactLoaded() {
 
         render = (overrideTab = mostRecentOverrideTab) => {
           mostRecentOverrideTab = overrideTab;
-
-          root.render(
-            createElement(DevTools, {
-              bridge,
-              browserTheme: getBrowserTheme(),
-              componentsPortalContainer,
-              enabledInspectedElementContextMenu: true,
-              overrideTab,
-              profilerPortalContainer,
-              showTabBar: false,
-              store,
-              warnIfUnsupportedVersionDetected: true,
-              viewAttributeSourceFunction,
-              viewElementSourceFunction,
-            }),
+          import('./parseHookNames').then(
+            ({parseHookNames, purgeCachedMetadata}) => {
+              root.render(
+                createElement(DevTools, {
+                  bridge,
+                  browserTheme: getBrowserTheme(),
+                  componentsPortalContainer,
+                  enabledInspectedElementContextMenu: true,
+                  loadHookNames: parseHookNames,
+                  overrideTab,
+                  profilerPortalContainer,
+                  purgeCachedHookNamesMetadata: purgeCachedMetadata,
+                  showTabBar: false,
+                  store,
+                  warnIfUnsupportedVersionDetected: true,
+                  viewAttributeSourceFunction,
+                  viewElementSourceFunction,
+                }),
+              );
+            },
           );
         };
 

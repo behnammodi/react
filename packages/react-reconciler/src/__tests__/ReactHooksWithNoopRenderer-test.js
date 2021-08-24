@@ -42,6 +42,7 @@ describe('ReactHooksWithNoopRenderer', () => {
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
+    act = require('jest-react').act;
     useState = React.useState;
     useReducer = React.useReducer;
     useEffect = React.useEffect;
@@ -55,7 +56,6 @@ describe('ReactHooksWithNoopRenderer', () => {
     useTransition = React.useTransition;
     useDeferredValue = React.useDeferredValue;
     Suspense = React.Suspense;
-    act = ReactNoop.act;
     ContinuousEventPriority = require('react-reconciler/constants')
       .ContinuousEventPriority;
 
@@ -164,34 +164,31 @@ describe('ReactHooksWithNoopRenderer', () => {
     expect(ReactNoop.getChildren()).toEqual([span('Count: 0')]);
 
     // Schedule some updates
-    if (gate(flags => flags.enableSyncDefaultUpdates)) {
-      React.startTransition(() => {
-        // TODO: Batched updates need to be inside startTransition?
-        ReactNoop.batchedUpdates(() => {
+    act(() => {
+      if (gate(flags => flags.enableSyncDefaultUpdates)) {
+        React.startTransition(() => {
           counter.current.updateCount(1);
           counter.current.updateCount(count => count + 10);
         });
-      });
-    } else {
-      ReactNoop.batchedUpdates(() => {
+      } else {
         counter.current.updateCount(1);
         counter.current.updateCount(count => count + 10);
+      }
+
+      // Partially flush without committing
+      expect(Scheduler).toFlushAndYieldThrough(['Count: 11']);
+      expect(ReactNoop.getChildren()).toEqual([span('Count: 0')]);
+
+      // Interrupt with a high priority update
+      ReactNoop.flushSync(() => {
+        ReactNoop.render(<Counter label="Total" />);
       });
-    }
+      expect(Scheduler).toHaveYielded(['Total: 0']);
 
-    // Partially flush without committing
-    expect(Scheduler).toFlushAndYieldThrough(['Count: 11']);
-    expect(ReactNoop.getChildren()).toEqual([span('Count: 0')]);
-
-    // Interrupt with a high priority update
-    ReactNoop.flushSync(() => {
-      ReactNoop.render(<Counter label="Total" />);
+      // Resume rendering
+      expect(Scheduler).toFlushAndYield(['Total: 11']);
+      expect(ReactNoop.getChildren()).toEqual([span('Total: 11')]);
     });
-    expect(Scheduler).toHaveYielded(['Total: 0']);
-
-    // Resume rendering
-    expect(Scheduler).toFlushAndYield(['Total: 11']);
-    expect(ReactNoop.getChildren()).toEqual([span('Total: 11')]);
   });
 
   it('throws inside class components', () => {
@@ -363,7 +360,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       expect(firstUpdater).toBe(secondUpdater);
     });
 
-    it('warns on set after unmount', () => {
+    it('does not warn on set after unmount', () => {
       let _updateCount;
       function Counter(props, ref) {
         const [, updateCount] = useState(0);
@@ -375,49 +372,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       expect(Scheduler).toFlushWithoutYielding();
       ReactNoop.render(null);
       expect(Scheduler).toFlushWithoutYielding();
-      expect(() => act(() => _updateCount(1))).toErrorDev(
-        "Warning: Can't perform a React state update on an unmounted " +
-          'component. This is a no-op, but it indicates a memory leak in your ' +
-          'application. To fix, cancel all subscriptions and asynchronous ' +
-          'tasks in a useEffect cleanup function.\n' +
-          '    in Counter (at **)',
-      );
-    });
-
-    it('dedupes the warning by component name', () => {
-      let _updateCountA;
-      function CounterA(props, ref) {
-        const [, updateCount] = useState(0);
-        _updateCountA = updateCount;
-        return null;
-      }
-      let _updateCountB;
-      function CounterB(props, ref) {
-        const [, updateCount] = useState(0);
-        _updateCountB = updateCount;
-        return null;
-      }
-
-      ReactNoop.render([<CounterA key="A" />, <CounterB key="B" />]);
-      expect(Scheduler).toFlushWithoutYielding();
-      ReactNoop.render(null);
-      expect(Scheduler).toFlushWithoutYielding();
-      expect(() => act(() => _updateCountA(1))).toErrorDev(
-        "Warning: Can't perform a React state update on an unmounted " +
-          'component. This is a no-op, but it indicates a memory leak in your ' +
-          'application. To fix, cancel all subscriptions and asynchronous ' +
-          'tasks in a useEffect cleanup function.\n' +
-          '    in CounterA (at **)',
-      );
-      // already cached so this logs no error
-      act(() => _updateCountA(2));
-      expect(() => act(() => _updateCountB(1))).toErrorDev(
-        "Warning: Can't perform a React state update on an unmounted " +
-          'component. This is a no-op, but it indicates a memory leak in your ' +
-          'application. To fix, cancel all subscriptions and asynchronous ' +
-          'tasks in a useEffect cleanup function.\n' +
-          '    in CounterB (at **)',
-      );
+      act(() => _updateCount(1));
     });
 
     it('works with memo', () => {
@@ -500,7 +455,7 @@ describe('ReactHooksWithNoopRenderer', () => {
 
       const root = ReactNoop.createRoot();
 
-      await ReactNoop.act(async () => {
+      await act(async () => {
         root.render(
           <>
             <Foo />
@@ -511,7 +466,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       expect(Scheduler).toHaveYielded(['Foo [0]', 'Bar']);
 
       // Bar will update Foo during its render phase. React should warn.
-      await ReactNoop.act(async () => {
+      await act(async () => {
         root.render(
           <>
             <Foo />
@@ -527,7 +482,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       });
 
       // It should not warn again (deduplication).
-      await ReactNoop.act(async () => {
+      await act(async () => {
         root.render(
           <>
             <Foo />
@@ -675,7 +630,7 @@ describe('ReactHooksWithNoopRenderer', () => {
 
       // Test that it works on update, too. This time the log is a bit different
       // because we started with reducerB instead of reducerA.
-      ReactNoop.act(() => {
+      act(() => {
         counter.current.dispatch('reset');
       });
       ReactNoop.render(<Counter ref={counter} />);
@@ -787,7 +742,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       expect(Scheduler).toFlushAndYield(['A:0']);
       expect(root).toMatchRenderedOutput(<span prop="A:0" />);
 
-      await ReactNoop.act(async () => {
+      await act(async () => {
         if (gate(flags => flags.enableSyncDefaultUpdates)) {
           React.startTransition(() => {
             root.render(<Foo signal={false} />);
@@ -1404,7 +1359,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       });
     });
 
-    it('warns about state updates for unmounted components with no pending passive unmounts', () => {
+    it('does not warn about state updates for unmounted components with no pending passive unmounts', () => {
       let completePendingRequest = null;
       function Component() {
         Scheduler.unstable_yieldValue('Component');
@@ -1435,13 +1390,11 @@ describe('ReactHooksWithNoopRenderer', () => {
         expect(Scheduler).toFlushAndYieldThrough(['layout destroy']);
 
         // Simulate an XHR completing.
-        expect(completePendingRequest).toErrorDev(
-          "Warning: Can't perform a React state update on an unmounted component.",
-        );
+        completePendingRequest();
       });
     });
 
-    it('still warns if there are pending passive unmount effects but not for the current fiber', () => {
+    it('does not warn if there are pending passive unmount effects but not for the current fiber', () => {
       let completePendingRequest = null;
       function ComponentWithXHR() {
         Scheduler.unstable_yieldValue('Component');
@@ -1495,13 +1448,11 @@ describe('ReactHooksWithNoopRenderer', () => {
         expect(Scheduler).toFlushAndYieldThrough(['a:layout destroy']);
 
         // Simulate an XHR completing in the component without a pending passive effect..
-        expect(completePendingRequest).toErrorDev(
-          "Warning: Can't perform a React state update on an unmounted component.",
-        );
+        completePendingRequest();
       });
     });
 
-    it('warns if there are updates after pending passive unmount effects have been flushed', () => {
+    it('does not warn if there are updates after pending passive unmount effects have been flushed', () => {
       let updaterFunction;
 
       function Component() {
@@ -1532,14 +1483,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       expect(Scheduler).toFlushAndYield(['passive destroy']);
 
       act(() => {
-        expect(() => {
-          updaterFunction(true);
-        }).toErrorDev(
-          "Warning: Can't perform a React state update on an unmounted component. " +
-            'This is a no-op, but it indicates a memory leak in your application. ' +
-            'To fix, cancel all subscriptions and asynchronous tasks in a useEffect cleanup function.\n' +
-            '    in Component (at **)',
-        );
+        updaterFunction(true);
       });
     });
 
@@ -1573,7 +1517,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       });
     });
 
-    it('does not show a warning when a component updates a childs state from within passive unmount function', () => {
+    it('does not show a warning when a component updates a child state from within passive unmount function', () => {
       function Parent() {
         Scheduler.unstable_yieldValue('Parent');
         const updaterRef = useRef(null);
@@ -1795,10 +1739,11 @@ describe('ReactHooksWithNoopRenderer', () => {
           return <Text text={'Count: ' + count} />;
         }
         await act(async () => {
-          ReactNoop.renderLegacySyncRoot(<Counter count={0} />);
+          ReactNoop.flushSync(() => {
+            ReactNoop.renderLegacySyncRoot(<Counter count={0} />);
+          });
 
           // Even in legacy mode, effects are deferred until after paint
-          ReactNoop.flushSync();
           expect(Scheduler).toHaveYielded(['Count: (empty)']);
           expect(ReactNoop.getChildren()).toEqual([span('Count: (empty)')]);
         });
@@ -3492,7 +3437,7 @@ describe('ReactHooksWithNoopRenderer', () => {
     }
 
     const root = ReactNoop.createRoot(null);
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(
         <>
           <CounterA />
@@ -3507,7 +3452,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       'Commit B: 0',
     ]);
 
-    await ReactNoop.act(async () => {
+    await act(async () => {
       setCounterA(1);
 
       // In the same batch, update B twice. To trigger the condition we're
@@ -3714,7 +3659,7 @@ describe('ReactHooksWithNoopRenderer', () => {
     }
 
     const root = ReactNoop.createRoot();
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App />);
     });
     expect(Scheduler).toHaveYielded([
@@ -3724,7 +3669,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       'Mount B',
     ]);
 
-    await ReactNoop.act(async () => {
+    await act(async () => {
       await resolveText('A');
     });
     expect(Scheduler).toHaveYielded([
@@ -3733,7 +3678,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       'Suspend! [B]',
     ]);
 
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(null);
     });
     // In the regression, SuspenseList would cause the children to "forget" that
@@ -3760,25 +3705,25 @@ describe('ReactHooksWithNoopRenderer', () => {
       return <Text text={`Render: ${count}`} />;
     }
 
-    ReactNoop.act(() => {
+    act(() => {
       ReactNoop.render(<Test />);
     });
 
     expect(Scheduler).toHaveYielded(['Render: 0', 'Effect: 0']);
 
-    ReactNoop.act(() => {
+    act(() => {
       handleClick();
     });
 
     expect(Scheduler).toHaveYielded(['Render: 0']);
 
-    ReactNoop.act(() => {
+    act(() => {
       handleClick();
     });
 
     expect(Scheduler).toHaveYielded(['Render: 0']);
 
-    ReactNoop.act(() => {
+    act(() => {
       handleClick();
     });
 

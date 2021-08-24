@@ -14,6 +14,7 @@ let React;
 let ReactNoop;
 let Scheduler;
 let ContinuousEventPriority;
+let act;
 
 describe('ReactIncrementalUpdates', () => {
   beforeEach(() => {
@@ -22,6 +23,7 @@ describe('ReactIncrementalUpdates', () => {
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
+    act = require('jest-react').act;
     ContinuousEventPriority = require('react-reconciler/constants')
       .ContinuousEventPriority;
   });
@@ -194,11 +196,13 @@ describe('ReactIncrementalUpdates', () => {
       // Now flush the remaining work. Even though e and f were already processed,
       // they should be processed again, to ensure that the terminal state
       // is deterministic.
-      // TODO: should d, e, f be flushed again first?
       expect(Scheduler).toFlushAndYield([
+        // Since 'g' is in a transition, we'll process 'd' separately first.
+        // That causes us to process 'd' with 'e' and 'f' rebased.
         'd',
         'e',
         'f',
+        // Then we'll re-process everything for 'g'.
         'a',
         'b',
         'c',
@@ -288,8 +292,6 @@ describe('ReactIncrementalUpdates', () => {
       });
 
       // The sync updates should have flushed, but not the async ones.
-      // TODO: should 'd' have flushed?
-      // TODO: should 'f' have flushed? I don't know what enqueueReplaceState is.
       expect(Scheduler).toHaveYielded(['e', 'f']);
       expect(ReactNoop.getChildren()).toEqual([span('f')]);
 
@@ -297,9 +299,12 @@ describe('ReactIncrementalUpdates', () => {
       // they should be processed again, to ensure that the terminal state
       // is deterministic.
       expect(Scheduler).toFlushAndYield([
+        // Since 'g' is in a transition, we'll process 'd' separately first.
+        // That causes us to process 'd' with 'e' and 'f' rebased.
         'd',
         'e',
         'f',
+        // Then we'll re-process everything for 'g'.
         'a',
         'b',
         'c',
@@ -556,7 +561,7 @@ describe('ReactIncrementalUpdates', () => {
       return null;
     }
 
-    ReactNoop.act(() => {
+    act(() => {
       if (gate(flags => flags.enableSyncDefaultUpdates)) {
         React.startTransition(() => {
           ReactNoop.render(<App />);
@@ -664,13 +669,13 @@ describe('ReactIncrementalUpdates', () => {
     }
 
     const root = ReactNoop.createRoot();
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App />);
     });
     expect(Scheduler).toHaveYielded(['Committed: ']);
     expect(root).toMatchRenderedOutput('');
 
-    await ReactNoop.act(async () => {
+    await act(async () => {
       if (gate(flags => flags.enableSyncDefaultUpdates)) {
         React.startTransition(() => {
           pushToLog('A');
@@ -725,13 +730,13 @@ describe('ReactIncrementalUpdates', () => {
     }
 
     const root = ReactNoop.createRoot();
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App />);
     });
     expect(Scheduler).toHaveYielded([]);
     expect(root).toMatchRenderedOutput('');
 
-    await ReactNoop.act(async () => {
+    await act(async () => {
       if (gate(flags => flags.enableSyncDefaultUpdates)) {
         React.startTransition(() => {
           pushToLog('A');
@@ -788,20 +793,20 @@ describe('ReactIncrementalUpdates', () => {
     }
 
     const root = ReactNoop.createRoot();
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App prop="A" />);
     });
     expect(root).toMatchRenderedOutput('0');
 
     // Changing the prop causes the count to increase by 100
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App prop="B" />);
     });
     expect(root).toMatchRenderedOutput('100');
 
     // Now increment the count by 1 with a state update. And, in the same
     // batch, change the prop back to its original value.
-    await ReactNoop.act(async () => {
+    await act(async () => {
       root.render(<App prop="A" />);
       app.setState(state => ({count: state.count + 1}));
     });

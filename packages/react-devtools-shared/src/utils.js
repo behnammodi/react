@@ -47,13 +47,17 @@ import {
 } from 'react-devtools-shared/src/types';
 import {localStorageGetItem, localStorageSetItem} from './storage';
 import {meta} from './hydration';
+
 import type {ComponentFilter, ElementType} from './types';
+import type {LRUCache} from 'react-devtools-shared/src/types';
 
 const cachedDisplayNames: WeakMap<Function, string> = new WeakMap();
 
 // On large trees, encoding takes significant time.
 // Try to reuse the already encoded strings.
-const encodedStringCache = new LRU({max: 1000});
+const encodedStringCache: LRUCache<string, Array<number>> = new LRU({
+  max: 1000,
+});
 
 export function alphaSortKeys(
   a: string | number | Symbol,
@@ -540,9 +544,13 @@ export function getDataType(data: Object): DataType {
         // but this seems kind of awkward and expensive.
         return 'array_buffer';
       } else if (typeof data[Symbol.iterator] === 'function') {
-        return data[Symbol.iterator]() === data
-          ? 'opaque_iterator'
-          : 'iterator';
+        const iterator = data[Symbol.iterator]();
+        if (!iterator) {
+          // Proxies might break assumptoins about iterators.
+          // See github.com/facebook/react/issues/21654
+        } else {
+          return iterator === data ? 'opaque_iterator' : 'iterator';
+        }
       } else if (data.constructor && data.constructor.name === 'RegExp') {
         return 'regexp';
       } else {

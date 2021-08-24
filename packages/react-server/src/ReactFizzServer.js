@@ -40,7 +40,9 @@ import {
   writeStartCompletedSuspenseBoundary,
   writeStartPendingSuspenseBoundary,
   writeStartClientRenderedSuspenseBoundary,
-  writeEndSuspenseBoundary,
+  writeEndCompletedSuspenseBoundary,
+  writeEndPendingSuspenseBoundary,
+  writeEndClientRenderedSuspenseBoundary,
   writeStartSegment,
   writeEndSegment,
   writeClientRenderBoundaryInstruction,
@@ -220,17 +222,20 @@ export function createRequest(
   destination: Destination,
   responseState: ResponseState,
   rootFormatContext: FormatContext,
-  progressiveChunkSize: number = DEFAULT_PROGRESSIVE_CHUNK_SIZE,
-  onError: (error: mixed) => void = defaultErrorHandler,
-  onCompleteAll: () => void = noop,
-  onReadyToStream: () => void = noop,
+  progressiveChunkSize: void | number,
+  onError: void | ((error: mixed) => void),
+  onCompleteAll: void | (() => void),
+  onReadyToStream: void | (() => void),
 ): Request {
   const pingedTasks = [];
   const abortSet: Set<Task> = new Set();
   const request = {
     destination,
     responseState,
-    progressiveChunkSize,
+    progressiveChunkSize:
+      progressiveChunkSize === undefined
+        ? DEFAULT_PROGRESSIVE_CHUNK_SIZE
+        : progressiveChunkSize,
     status: BUFFERING,
     nextSegmentId: 0,
     allPendingTasks: 0,
@@ -241,9 +246,9 @@ export function createRequest(
     clientRenderedBoundaries: [],
     completedBoundaries: [],
     partialBoundaries: [],
-    onError,
-    onCompleteAll,
-    onReadyToStream,
+    onError: onError === undefined ? defaultErrorHandler : onError,
+    onCompleteAll: onCompleteAll === undefined ? noop : onCompleteAll,
+    onReadyToStream: onReadyToStream === undefined ? noop : onReadyToStream,
   };
   // This segment represents the root fallback.
   const rootSegment = createPendingSegment(request, 0, null, rootFormatContext);
@@ -549,16 +554,6 @@ function shouldConstruct(Component) {
   return Component.prototype && Component.prototype.isReactComponent;
 }
 
-function invalidRenderResult(type: any): void {
-  invariant(
-    false,
-    '%s(...): Nothing was returned from render. This usually means a ' +
-      'return statement is missing. Or, to render nothing, ' +
-      'return null.',
-    getComponentNameFromType(type) || 'Component',
-  );
-}
-
 function renderWithHooks<Props, SecondArg>(
   request: Request,
   task: Task,
@@ -569,11 +564,7 @@ function renderWithHooks<Props, SecondArg>(
   const componentIdentity = {};
   prepareToUseHooks(componentIdentity);
   const result = Component(props, secondArg);
-  const children = finishHooks(Component, props, result, secondArg);
-  if (children === undefined) {
-    invalidRenderResult(Component);
-  }
-  return children;
+  return finishHooks(Component, props, result, secondArg);
 }
 
 function finishClassComponent(
@@ -584,13 +575,6 @@ function finishClassComponent(
   props: any,
 ): ReactNodeList {
   const nextChildren = instance.render();
-  if (nextChildren === undefined) {
-    if (__DEV__ && instance.render._isMockFunction) {
-      // We allow auto-mocks to proceed as if they're returning null.
-    } else {
-      invalidRenderResult(Component);
-    }
-  }
 
   if (__DEV__) {
     if (instance.props !== props) {
@@ -1424,7 +1408,11 @@ function finishedTask(
       // This must have been the last segment we were waiting on. This boundary is now complete.
       if (segment.parentFlushed) {
         // Our parent segment already flushed, so we need to schedule this segment to be emitted.
-        boundary.completedSegments.push(segment);
+        // If it is a segment that was aborted, we'll write other content instead so we don't need
+        // to emit it.
+        if (segment.status === COMPLETED) {
+          boundary.completedSegments.push(segment);
+        }
       }
       if (boundary.parentFlushed) {
         // The segment might be part of a segment that didn't flush yet, but if the boundary's
@@ -1439,14 +1427,18 @@ function finishedTask(
     } else {
       if (segment.parentFlushed) {
         // Our parent already flushed, so we need to schedule this segment to be emitted.
-        const completedSegments = boundary.completedSegments;
-        completedSegments.push(segment);
-        if (completedSegments.length === 1) {
-          // This is the first time since we last flushed that we completed anything.
-          // We can schedule this boundary to emit its partially completed segments early
-          // in case the parent has already been flushed.
-          if (boundary.parentFlushed) {
-            request.partialBoundaries.push(boundary);
+        // If it is a segment that was aborted, we'll write other content instead so we don't need
+        // to emit it.
+        if (segment.status === COMPLETED) {
+          const completedSegments = boundary.completedSegments;
+          completedSegments.push(segment);
+          if (completedSegments.length === 1) {
+            // This is the first time since we last flushed that we completed anything.
+            // We can schedule this boundary to emit its partially completed segments early
+            // in case the parent has already been flushed.
+            if (boundary.parentFlushed) {
+              request.partialBoundaries.push(boundary);
+            }
           }
         }
       }
@@ -1586,7 +1578,7 @@ function flushSubtree(
     default: {
       invariant(
         false,
-        'Errored or already flushed boundaries should not be flushed again. This is a bug in React.',
+        'Aborted, errored or already flushed boundaries should not be flushed again. This is a bug in React.',
       );
     }
   }
@@ -1609,28 +1601,39 @@ function flushSegment(
     // Emit a client rendered suspense boundary wrapper.
     // We never queue the inner boundary so we'll never emit its content or partial segments.
 
-    writeStartClientRenderedSuspenseBoundary(destination, boundary.id);
+    writeStartClientRenderedSuspenseBoundary(
+      destination,
+      request.responseState,
+      boundary.id,
+    );
 
     // Flush the fallback.
     flushSubtree(request, destination, segment);
 
-    return writeEndSuspenseBoundary(destination);
+    return writeEndClientRenderedSuspenseBoundary(
+      destination,
+      request.responseState,
+    );
   } else if (boundary.pendingTasks > 0) {
     // This boundary is still loading. Emit a pending suspense boundary wrapper.
 
     // Assign an ID to refer to the future content by.
     boundary.rootSegmentID = request.nextSegmentId++;
     if (boundary.completedSegments.length > 0) {
-      // If this is at least partially complete, we can queue it to be partially emmitted early.
+      // If this is at least partially complete, we can queue it to be partially emitted early.
       request.partialBoundaries.push(boundary);
     }
 
-    writeStartPendingSuspenseBoundary(destination, boundary.id);
+    writeStartPendingSuspenseBoundary(
+      destination,
+      request.responseState,
+      boundary.id,
+    );
 
     // Flush the fallback.
     flushSubtree(request, destination, segment);
 
-    return writeEndSuspenseBoundary(destination);
+    return writeEndPendingSuspenseBoundary(destination, request.responseState);
   } else if (boundary.byteSize > request.progressiveChunkSize) {
     // This boundary is large and will be emitted separately so that we can progressively show
     // other content. We add it to the queue during the flush because we have to ensure that
@@ -1643,16 +1646,24 @@ function flushSegment(
 
     request.completedBoundaries.push(boundary);
     // Emit a pending rendered suspense boundary wrapper.
-    writeStartPendingSuspenseBoundary(destination, boundary.id);
+    writeStartPendingSuspenseBoundary(
+      destination,
+      request.responseState,
+      boundary.id,
+    );
 
     // Flush the fallback.
     flushSubtree(request, destination, segment);
 
-    return writeEndSuspenseBoundary(destination);
+    return writeEndPendingSuspenseBoundary(destination, request.responseState);
   } else {
     // We can inline this boundary's content as a complete boundary.
 
-    writeStartCompletedSuspenseBoundary(destination, boundary.id);
+    writeStartCompletedSuspenseBoundary(
+      destination,
+      request.responseState,
+      boundary.id,
+    );
 
     const completedSegments = boundary.completedSegments;
     invariant(
@@ -1662,7 +1673,10 @@ function flushSegment(
     const contentSegment = completedSegments[0];
     flushSegment(request, destination, contentSegment);
 
-    return writeEndSuspenseBoundary(destination);
+    return writeEndCompletedSuspenseBoundary(
+      destination,
+      request.responseState,
+    );
   }
 }
 

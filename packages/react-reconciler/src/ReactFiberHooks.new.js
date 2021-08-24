@@ -79,7 +79,6 @@ import {
   requestEventTime,
   warnIfNotCurrentlyActingEffectsInDEV,
   warnIfNotCurrentlyActingUpdatesInDev,
-  warnIfNotScopedWithMatchingAct,
   markSkippedUpdateLanes,
   isInterleavedUpdate,
 } from './ReactFiberWorkLoop.new';
@@ -450,7 +449,7 @@ export function renderWithHooks<Props, SecondArg>(
   }
 
   // We can assume the previous dispatcher is always this one, since we set it
-  // at the beginning of the render phase and there's no re-entrancy.
+  // at the beginning of the render phase and there's no re-entrance.
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   if (__DEV__) {
@@ -554,7 +553,7 @@ export function bailoutHooks(
 
 export function resetHooksAfterThrow(): void {
   // We can assume the previous dispatcher is always this one, since we set it
-  // at the beginning of the render phase and there's no re-entrancy.
+  // at the beginning of the render phase and there's no re-entrance.
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   if (didScheduleRenderPhaseUpdate) {
@@ -935,7 +934,7 @@ type MutableSourceMemoizedState<Source, Snapshot> = {|
   subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
 |};
 
-function readFromUnsubcribedMutableSource<Source, Snapshot>(
+function readFromUnsubscribedMutableSource<Source, Snapshot>(
   root: FiberRoot,
   source: MutableSource<Source>,
   getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
@@ -1075,7 +1074,7 @@ function useMutableSource<Source, Snapshot>(
 
   // eslint-disable-next-line prefer-const
   let [currentSnapshot, setSnapshot] = dispatcher.useState(() =>
-    readFromUnsubcribedMutableSource(root, source, getSnapshot),
+    readFromUnsubscribedMutableSource(root, source, getSnapshot),
   );
   let snapshot = currentSnapshot;
 
@@ -1209,7 +1208,7 @@ function useMutableSource<Source, Snapshot>(
     ): any);
     stateHook.queue = newQueue;
     stateHook.baseQueue = null;
-    snapshot = readFromUnsubcribedMutableSource(root, source, getSnapshot);
+    snapshot = readFromUnsubscribedMutableSource(root, source, getSnapshot);
     stateHook.memoizedState = stateHook.baseState = snapshot;
   }
 
@@ -1950,7 +1949,7 @@ function dispatchAction<S, A>(
         // This is the first update. Create a circular list.
         update.next = update;
         // At the end of the current render, this queue's interleaved updates will
-        // be transfered to the pending queue.
+        // be transferred to the pending queue.
         pushInterleavedQueue(queue);
       } else {
         update.next = interleaved.next;
@@ -2011,7 +2010,6 @@ function dispatchAction<S, A>(
     if (__DEV__) {
       // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
       if ('undefined' !== typeof jest) {
-        warnIfNotScopedWithMatchingAct(fiber);
         warnIfNotCurrentlyActingUpdatesInDev(fiber);
       }
     }

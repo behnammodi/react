@@ -28,7 +28,7 @@ describe('ReactDOMFiberAsync', () => {
     container = document.createElement('div');
     React = require('react');
     ReactDOM = require('react-dom');
-    act = require('react-dom/test-utils').unstable_concurrentAct;
+    act = require('jest-react').act;
     Scheduler = require('scheduler');
 
     document.body.appendChild(container);
@@ -132,7 +132,7 @@ describe('ReactDOMFiberAsync', () => {
   it('flushSync logs an error if already performing work', () => {
     class Component extends React.Component {
       componentDidUpdate() {
-        ReactDOM.flushSync(() => {});
+        ReactDOM.flushSync();
       }
       render() {
         return null;

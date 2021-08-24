@@ -17,19 +17,16 @@ import {
   unstable_renderSubtreeIntoContainer,
   unmountComponentAtNode,
 } from './ReactDOMLegacy';
-import {createRoot, isValidContainer} from './ReactDOMRoot';
+import {createRoot, hydrateRoot, isValidContainer} from './ReactDOMRoot';
 import {createEventHandle} from './ReactDOMEventHandle';
 
 import {
-  batchedEventUpdates,
   batchedUpdates,
   discreteUpdates,
-  flushDiscreteUpdates,
   flushSync,
+  flushSyncWithoutWarningIfAlreadyRendering,
   flushControlled,
   injectIntoDevTools,
-  flushPassiveEffects,
-  IsThisRendererActing,
   attemptSynchronousHydration,
   attemptDiscreteHydration,
   attemptContinuousHydration,
@@ -103,8 +100,7 @@ setRestoreImplementation(restoreControlledState);
 setBatchingImplementation(
   batchedUpdates,
   discreteUpdates,
-  flushDiscreteUpdates,
-  batchedEventUpdates,
+  flushSyncWithoutWarningIfAlreadyRendering,
 );
 
 function createPortal(
@@ -155,7 +151,7 @@ function renderSubtreeIntoContainer(
 }
 
 const Internals = {
-  // Keep in sync with ReactTestUtils.js, and ReactTestUtilsAct.js.
+  // Keep in sync with ReactTestUtils.js.
   // This is an array for better minification.
   Events: [
     getInstanceFromNode,
@@ -163,9 +159,7 @@ const Internals = {
     getFiberCurrentPropsFromNode,
     enqueueStateRestore,
     restoreStateIfNeeded,
-    flushPassiveEffects,
-    // TODO: This is related to `act`, not events. Move to separate key?
-    IsThisRendererActing,
+    batchedUpdates,
   ],
 };
 
@@ -182,6 +176,7 @@ export {
   unmountComponentAtNode,
   // exposeConcurrentModeAPIs
   createRoot,
+  hydrateRoot,
   flushControlled as unstable_flushControlled,
   scheduleHydration as unstable_scheduleHydration,
   // Disabled behind disableUnstableRenderSubtreeIntoContainer

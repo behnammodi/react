@@ -10,7 +10,7 @@
 import * as React from 'react';
 import {useCallback, useContext} from 'react';
 import {TreeDispatcherContext, TreeStateContext} from './TreeContext';
-import {BridgeContext, StoreContext} from '../context';
+import {BridgeContext, StoreContext, OptionsContext} from '../context';
 import Button from '../Button';
 import ButtonIcon from '../ButtonIcon';
 import {ModalDialogContext} from '../ModalDialog';
@@ -37,9 +37,20 @@ export default function InspectedElementWrapper(_: Props) {
   );
   const bridge = useContext(BridgeContext);
   const store = useContext(StoreContext);
+  const {
+    hideToggleErrorAction,
+    hideToggleSuspenseAction,
+    hideLogAction,
+    hideViewSourceAction,
+  } = useContext(OptionsContext);
   const {dispatch: modalDialogDispatch} = useContext(ModalDialogContext);
 
-  const {inspectedElement} = useContext(InspectedElementContext);
+  const {
+    hookNames,
+    inspectedElement,
+    parseHookNames,
+    toggleParseHookNames,
+  } = useContext(InspectedElementContext);
 
   const element =
     inspectedElementID !== null
@@ -103,10 +114,14 @@ export default function InspectedElementWrapper(_: Props) {
     inspectedElement.state != null;
 
   const canToggleError =
-    inspectedElement != null && inspectedElement.canToggleError;
+    !hideToggleErrorAction &&
+    inspectedElement != null &&
+    inspectedElement.canToggleError;
 
   const canToggleSuspense =
-    inspectedElement != null && inspectedElement.canToggleSuspense;
+    !hideToggleSuspenseAction &&
+    inspectedElement != null &&
+    inspectedElement.canToggleSuspense;
 
   const toggleErrored = useCallback(() => {
     if (inspectedElement == null || targetErrorBoundaryID == null) {
@@ -243,19 +258,23 @@ export default function InspectedElementWrapper(_: Props) {
             <ButtonIcon type="view-dom" />
           </Button>
         )}
-        <Button
-          className={styles.IconButton}
-          onClick={logElement}
-          title="Log this component data to the console">
-          <ButtonIcon type="log-data" />
-        </Button>
-        <Button
-          className={styles.IconButton}
-          disabled={!canViewSource}
-          onClick={viewSource}
-          title="View source for this element">
-          <ButtonIcon type="view-source" />
-        </Button>
+        {!hideLogAction && (
+          <Button
+            className={styles.IconButton}
+            onClick={logElement}
+            title="Log this component data to the console">
+            <ButtonIcon type="log-data" />
+          </Button>
+        )}
+        {!hideViewSourceAction && (
+          <Button
+            className={styles.IconButton}
+            disabled={!canViewSource}
+            onClick={viewSource}
+            title="View source for this element">
+            <ButtonIcon type="view-source" />
+          </Button>
+        )}
       </div>
 
       {inspectedElement === null && (
@@ -268,7 +287,10 @@ export default function InspectedElementWrapper(_: Props) {
             inspectedElementID /* Force reset when selected Element changes */
           }
           element={element}
+          hookNames={hookNames}
           inspectedElement={inspectedElement}
+          parseHookNames={parseHookNames}
+          toggleParseHookNames={toggleParseHookNames}
         />
       )}
     </div>

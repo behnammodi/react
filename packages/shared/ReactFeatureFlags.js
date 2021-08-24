@@ -17,7 +17,7 @@ export const enableDebugTracing = false;
 
 // Adds user timing marks for e.g. state updates, suspense, and work loop stuff,
 // for an experimental scheduling profiler tool.
-export const enableSchedulingProfiler = __PROFILE__ && __EXPERIMENTAL__;
+export const enableSchedulingProfiler = __PROFILE__;
 
 // Helps identify side effects in render-phase lifecycle hooks and setState
 // reducers by double invoking them in StrictLegacyMode.
@@ -78,7 +78,6 @@ export const enableCreateEventHandleAPI = false;
 
 // We will enforce mocking scheduler with scheduler/unstable_mock at some point. (v18?)
 // Till then, we warn about the missing mock, but still fallback to a legacy mode compatible version
-export const warnAboutUnmockedScheduler = false;
 
 // Add a callback property to suspense to notify which promises are currently
 // in the update queue. This allows reporting and tracing of what is causing
@@ -106,6 +105,9 @@ export const enableNewReconciler = false;
 
 export const disableNativeComponentFrames = false;
 
+// Internal only.
+export const enableGetInspectorDataForInstanceInProduction = false;
+
 // Errors that are thrown while unmounting (or after in the case of passive effects)
 // should bypass any error boundaries that are also unmounting (or have unmounted)
 // and be handled by the nearest still-mounted boundary.
@@ -123,7 +125,7 @@ export const skipUnmountedBoundaries = false;
 //
 // It's an enum so that we can experiment with different levels of
 // aggressiveness.
-export const deletedTreeCleanUpLevel = 1;
+export const deletedTreeCleanUpLevel = 3;
 
 // Destroy layout effects for components that are hidden because something suspended in an update
 // and recreate them when they are shown again (after the suspended boundary has resolved).
@@ -171,3 +173,5 @@ export const enableLazyContextPropagation = false;
 export const enableSyncDefaultUpdates = true;
 
 export const allowConcurrentByDefault = false;
+
+export const enablePersistentOffscreenHostContainer = false;

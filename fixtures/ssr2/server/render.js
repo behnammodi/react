@@ -8,7 +8,7 @@
 
 import * as React from 'react';
 // import {renderToString} from 'react-dom/server';
-import {pipeToNodeWritable} from 'react-dom/unstable-fizz';
+import {pipeToNodeWritable} from 'react-dom/server';
 import App from '../src/App';
 import {DataProvider} from '../src/data';
 import {API_DELAY, ABORT_DELAY} from './delays';
@@ -47,7 +47,6 @@ module.exports = function render(url, res) {
         // If something errored before we started streaming, we set the error code appropriately.
         res.statusCode = didError ? 500 : 200;
         res.setHeader('Content-type', 'text/html');
-        res.write('<!DOCTYPE html>');
         startWriting();
       },
       onError(x) {
