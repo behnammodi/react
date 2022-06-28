@@ -7,112 +7,47 @@
  * @flow
  */
 
-import ReactVersion from 'shared/ReactVersion';
-import invariant from 'shared/invariant';
-
 import type {ReactNodeList} from 'shared/ReactTypes';
 
-import {
-  createRequest,
-  startWork,
-  startFlowing,
-  abort,
-} from 'react-server/src/ReactFizzServer';
-
-import {
-  createResponseState,
-  createRootFormatContext,
-} from './ReactDOMServerLegacyFormatConfig';
+import {version, renderToStringImpl} from './ReactDOMLegacyServerImpl';
 
 type ServerOptions = {
   identifierPrefix?: string,
 };
 
-function onError() {
-  // Non-fatal errors are ignored.
-}
-
-function renderToStringImpl(
-  children: ReactNodeList,
-  options: void | ServerOptions,
-  generateStaticMarkup: boolean,
-): string {
-  let didFatal = false;
-  let fatalError = null;
-  let result = '';
-  const destination = {
-    push(chunk) {
-      if (chunk !== null) {
-        result += chunk;
-      }
-      return true;
-    },
-    destroy(error) {
-      didFatal = true;
-      fatalError = error;
-    },
-  };
-
-  let readyToStream = false;
-  function onReadyToStream() {
-    readyToStream = true;
-  }
-  const request = createRequest(
-    children,
-    destination,
-    createResponseState(
-      generateStaticMarkup,
-      options ? options.identifierPrefix : undefined,
-    ),
-    createRootFormatContext(),
-    Infinity,
-    onError,
-    undefined,
-    onReadyToStream,
-  );
-  startWork(request);
-  // If anything suspended and is still pending, we'll abort it before writing.
-  // That way we write only client-rendered boundaries from the start.
-  abort(request);
-  startFlowing(request);
-  if (didFatal) {
-    throw fatalError;
-  }
-  invariant(
-    readyToStream,
-    'A React component suspended while rendering, but no fallback UI was specified.\n' +
-      '\n' +
-      'Add a <Suspense fallback=...> component higher in the tree to ' +
-      'provide a loading indicator or placeholder to display.',
-  );
-  return result;
-}
-
 function renderToString(
   children: ReactNodeList,
   options?: ServerOptions,
 ): string {
-  return renderToStringImpl(children, options, false);
+  return renderToStringImpl(
+    children,
+    options,
+    false,
+    'The server used "renderToString" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to "renderToReadableStream" which supports Suspense on the server',
+  );
 }
 
 function renderToStaticMarkup(
   children: ReactNodeList,
   options?: ServerOptions,
 ): string {
-  return renderToStringImpl(children, options, true);
+  return renderToStringImpl(
+    children,
+    options,
+    true,
+    'The server used "renderToStaticMarkup" which does not support Suspense. If you intended to have the server wait for the suspended component please switch to "renderToReadableStream" which supports Suspense on the server',
+  );
 }
 
 function renderToNodeStream() {
-  invariant(
-    false,
+  throw new Error(
     'ReactDOMServer.renderToNodeStream(): The streaming API is not available ' +
       'in the browser. Use ReactDOMServer.renderToString() instead.',
   );
 }
 
 function renderToStaticNodeStream() {
-  invariant(
-    false,
+  throw new Error(
     'ReactDOMServer.renderToStaticNodeStream(): The streaming API is not available ' +
       'in the browser. Use ReactDOMServer.renderToStaticMarkup() instead.',
   );
@@ -123,5 +58,5 @@ export {
   renderToStaticMarkup,
   renderToNodeStream,
   renderToStaticNodeStream,
-  ReactVersion as version,
+  version,
 };

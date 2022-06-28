@@ -99,6 +99,16 @@ export function processModelChunk(
   return stringToChunk(row);
 }
 
+export function processReferenceChunk(
+  request: Request,
+  id: number,
+  reference: string,
+): Chunk {
+  const json = stringify(reference);
+  const row = serializeRowHeader('J', id) + json + '\n';
+  return stringToChunk(row);
+}
+
 export function processModuleChunk(
   request: Request,
   id: number,
@@ -106,6 +116,15 @@ export function processModuleChunk(
 ): Chunk {
   const json = stringify(moduleMetaData);
   const row = serializeRowHeader('M', id) + json + '\n';
+  return stringToChunk(row);
+}
+
+export function processProviderChunk(
+  request: Request,
+  id: number,
+  contextName: string,
+): Chunk {
+  const row = serializeRowHeader('P', id) + contextName + '\n';
   return stringToChunk(row);
 }
 
@@ -124,6 +143,7 @@ export {
   flushBuffered,
   beginWriting,
   writeChunk,
+  writeChunkAndReturn,
   completeWriting,
   close,
   closeWithError,

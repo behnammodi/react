@@ -35,13 +35,13 @@ const gzipSize = require('gzip-size');
 const {readFileSync, statSync} = require('fs');
 
 const BASE_DIR = 'base-build';
-const HEAD_DIR = 'build2';
+const HEAD_DIR = 'build';
 
 const CRITICAL_THRESHOLD = 0.02;
 const SIGNIFICANCE_THRESHOLD = 0.002;
 const CRITICAL_ARTIFACT_PATHS = new Set([
   // We always report changes to these bundles, even if the change is
-  // insiginificant or non-existent.
+  // insignificant or non-existent.
   'oss-stable/react-dom/cjs/react-dom.production.min.js',
   'oss-experimental/react-dom/cjs/react-dom.production.min.js',
   'facebook-www/ReactDOM-prod.classic.js',
@@ -84,9 +84,10 @@ const header = `
   | Name | +/- | Base | Current | +/- gzip | Base gzip | Current gzip |
   | ---- | --- | ---- | ------- | -------- | --------- | ------------ |`;
 
-function row(result) {
+function row(result, baseSha, headSha) {
+  const diffViewUrl = `https://react-builds.vercel.app/commits/${headSha}/files/${result.path}?compare=${baseSha}`;
   // prettier-ignore
-  return `| ${result.path} | **${change(result.change)}** | ${kbs(result.baseSize)} | ${kbs(result.headSize)} | ${change(result.changeGzip)} | ${kbs(result.baseSizeGzip)} | ${kbs(result.headSizeGzip)}`;
+  return `| [${result.path}](${diffViewUrl}) | **${change(result.change)}** | ${kbs(result.baseSize)} | ${kbs(result.headSize)} | ${change(result.changeGzip)} | ${kbs(result.baseSizeGzip)} | ${kbs(result.headSizeGzip)}`;
 }
 
 (async function() {
@@ -102,8 +103,8 @@ function row(result) {
   let headSha;
   let baseSha;
   try {
-    headSha = (readFileSync(HEAD_DIR + '/COMMIT_SHA') + '').trim();
-    baseSha = (readFileSync(BASE_DIR + '/COMMIT_SHA') + '').trim();
+    headSha = String(readFileSync(HEAD_DIR + '/COMMIT_SHA')).trim();
+    baseSha = String(readFileSync(BASE_DIR + '/COMMIT_SHA')).trim();
   } catch {
     warn(
       "Failed to read build artifacts. It's possible a build configuration " +
@@ -127,7 +128,7 @@ function row(result) {
   const resultsMap = new Map();
 
   // Find all the head (current) artifacts paths.
-  const headArtifactPaths = await glob('**/*.js', {cwd: 'build2'});
+  const headArtifactPaths = await glob('**/*.js', {cwd: 'build'});
   for (const artifactPath of headArtifactPaths) {
     try {
       // This will throw if there's no matching base artifact
@@ -196,7 +197,7 @@ function row(result) {
           artifactPath
       );
     }
-    criticalResults.push(row(result));
+    criticalResults.push(row(result, baseSha, headSha));
   }
 
   let significantResults = [];
@@ -212,7 +213,7 @@ function row(result) {
       // Skip critical artifacts. We added those earlier, in a fixed order.
       !CRITICAL_ARTIFACT_PATHS.has(result.path)
     ) {
-      criticalResults.push(row(result));
+      criticalResults.push(row(result, baseSha, headSha));
     }
 
     // Do the same for results that exceed the significant threshold. These
@@ -224,7 +225,7 @@ function row(result) {
       result.change === Infinity ||
       result.change === -1
     ) {
-      significantResults.push(row(result));
+      significantResults.push(row(result, baseSha, headSha));
     }
   }
 

@@ -23,6 +23,7 @@ import {
   LOCAL_STORAGE_SHOULD_PATCH_CONSOLE_KEY,
   LOCAL_STORAGE_TRACE_UPDATES_ENABLED_KEY,
   LOCAL_STORAGE_SHOW_INLINE_WARNINGS_AND_ERRORS_KEY,
+  LOCAL_STORAGE_HIDE_CONSOLE_LOGS_IN_STRICT_MODE,
 } from 'react-devtools-shared/src/constants';
 import {useLocalStorage} from '../hooks';
 import {BridgeContext} from '../context';
@@ -48,6 +49,9 @@ type Context = {|
 
   parseHookNames: boolean,
   setParseHookNames: (value: boolean) => void,
+
+  hideConsoleLogsInStrictMode: boolean,
+  sethideConsoleLogsInStrictMode: (value: boolean) => void,
 
   showInlineWarningsAndErrors: boolean,
   setShowInlineWarningsAndErrors: (value: boolean) => void,
@@ -102,6 +106,13 @@ function SettingsContextController({
   );
   const [parseHookNames, setParseHookNames] = useLocalStorage<boolean>(
     LOCAL_STORAGE_PARSE_HOOK_NAMES_KEY,
+    false,
+  );
+  const [
+    hideConsoleLogsInStrictMode,
+    sethideConsoleLogsInStrictMode,
+  ] = useLocalStorage<boolean>(
+    LOCAL_STORAGE_HIDE_CONSOLE_LOGS_IN_STRICT_MODE,
     false,
   );
   const [
@@ -169,12 +180,16 @@ function SettingsContextController({
       appendComponentStack,
       breakOnConsoleErrors,
       showInlineWarningsAndErrors,
+      hideConsoleLogsInStrictMode,
+      browserTheme,
     });
   }, [
     bridge,
     appendComponentStack,
     breakOnConsoleErrors,
     showInlineWarningsAndErrors,
+    hideConsoleLogsInStrictMode,
+    browserTheme,
   ]);
 
   useEffect(() => {
@@ -199,6 +214,8 @@ function SettingsContextController({
       setTraceUpdatesEnabled,
       setShowInlineWarningsAndErrors,
       showInlineWarningsAndErrors,
+      sethideConsoleLogsInStrictMode,
+      hideConsoleLogsInStrictMode,
       theme,
       browserTheme,
       traceUpdatesEnabled,
@@ -216,6 +233,8 @@ function SettingsContextController({
       setTraceUpdatesEnabled,
       setShowInlineWarningsAndErrors,
       showInlineWarningsAndErrors,
+      sethideConsoleLogsInStrictMode,
+      hideConsoleLogsInStrictMode,
       theme,
       browserTheme,
       traceUpdatesEnabled,
@@ -226,28 +245,6 @@ function SettingsContextController({
     <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
-  );
-}
-
-function setStyleVariable(
-  name: string,
-  value: string,
-  documentElements: DocumentElements,
-) {
-  documentElements.forEach(documentElement =>
-    documentElement.style.setProperty(name, value),
-  );
-}
-
-function updateStyleHelper(
-  themeKey: string,
-  style: string,
-  documentElements: DocumentElements,
-) {
-  setStyleVariable(
-    `--${style}`,
-    `var(--${themeKey}-${style})`,
-    documentElements,
   );
 }
 
@@ -277,12 +274,6 @@ export function updateThemeVariables(
     // $FlowFixMe scrollbarColor is missing in CSSStyleDeclaration
     documentElement.style.scrollbarColor = `var(${`--${theme}-color-scroll-thumb`}) var(${`--${theme}-color-scroll-track`})`;
   });
-
-  // The ThemeProvider works by writing DOM style variables to an HTMLDivElement.
-  // Because Portals render in a different DOM subtree, these variables don't propagate.
-  // So we need to also set @reach/tooltip specific styles on the root.
-  updateStyleHelper(theme, 'color-tooltip-background', documentElements);
-  updateStyleHelper(theme, 'color-tooltip-text', documentElements);
 }
 
 export {SettingsContext, SettingsContextController};

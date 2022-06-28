@@ -11,9 +11,10 @@ import type {RowEncoding, JSONValue} from './ReactFlightNativeRelayProtocol';
 import type {Request, ReactModel} from 'react-server/src/ReactFlightServer';
 import hasOwnProperty from 'shared/hasOwnProperty';
 import isArray from 'shared/isArray';
+import type {JSResourceReference} from 'JSResourceReference';
 import JSResourceReferenceImpl from 'JSResourceReferenceImpl';
 
-export type ModuleReference<T> = JSResourceReferenceImpl<T>;
+export type ModuleReference<T> = JSResourceReference<T>;
 
 import type {
   Destination,
@@ -113,6 +114,14 @@ export function processModelChunk(
   return ['J', id, json];
 }
 
+export function processReferenceChunk(
+  request: Request,
+  id: number,
+  reference: string,
+): Chunk {
+  return ['J', id, reference];
+}
+
 export function processModuleChunk(
   request: Request,
   id: number,
@@ -120,6 +129,14 @@ export function processModuleChunk(
 ): Chunk {
   // The moduleMetaData is already a JSON serializable value.
   return ['M', id, moduleMetaData];
+}
+
+export function processProviderChunk(
+  request: Request,
+  id: number,
+  contextName: string,
+): Chunk {
+  return ['P', id, contextName];
 }
 
 export function processSymbolChunk(
@@ -138,7 +155,14 @@ export function flushBuffered(destination: Destination) {}
 
 export function beginWriting(destination: Destination) {}
 
-export function writeChunk(destination: Destination, chunk: Chunk): boolean {
+export function writeChunk(destination: Destination, chunk: Chunk): void {
+  emitRow(destination, chunk);
+}
+
+export function writeChunkAndReturn(
+  destination: Destination,
+  chunk: Chunk,
+): boolean {
   emitRow(destination, chunk);
   return true;
 }

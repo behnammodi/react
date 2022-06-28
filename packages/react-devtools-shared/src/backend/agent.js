@@ -25,7 +25,7 @@ import {
   initialize as setupTraceUpdates,
   toggleEnabled as setTraceUpdatesEnabled,
 } from './views/TraceUpdates';
-import {patch as patchConsole, unpatch as unpatchConsole} from './console';
+import {patch as patchConsole} from './console';
 import {currentBridgeProtocol} from 'react-devtools-shared/src/bridge';
 
 import type {BackendBridge} from 'react-devtools-shared/src/bridge';
@@ -40,6 +40,7 @@ import type {
 } from './types';
 import type {ComponentFilter} from '../types';
 import {isSynchronousXHRSupported} from './utils';
+import type {BrowserTheme} from 'react-devtools-shared/src/devtools/views/DevTools';
 
 const debug = (methodName, ...args) => {
   if (__DEBUG__) {
@@ -71,6 +72,7 @@ type CopyElementParams = {|
 |};
 
 type InspectElementParams = {|
+  forceFullData: boolean,
   id: number,
   path: Array<string | number> | null,
   rendererID: number,
@@ -183,6 +185,7 @@ export default class Agent extends EventEmitter<{|
     bridge.addListener('clearWarningsForFiberID', this.clearWarningsForFiberID);
     bridge.addListener('copyElementPath', this.copyElementPath);
     bridge.addListener('deletePath', this.deletePath);
+    bridge.addListener('getBackendVersion', this.getBackendVersion);
     bridge.addListener('getBridgeProtocol', this.getBridgeProtocol);
     bridge.addListener('getProfilingData', this.getProfilingData);
     bridge.addListener('getProfilingStatus', this.getProfilingStatus);
@@ -222,6 +225,14 @@ export default class Agent extends EventEmitter<{|
     if (this._isProfiling) {
       bridge.send('profilingStatus', true);
     }
+
+    // Send the Bridge protocol and backend versions, after initialization, in case the frontend has already requested it.
+    // The Store may be instantiated beore the agent.
+    const version = process.env.DEVTOOLS_VERSION;
+    if (version) {
+      this._bridge.send('backendVersion', version);
+    }
+    this._bridge.send('bridgeProtocol', currentBridgeProtocol);
 
     // Notify the frontend if the backend supports the Storage API (e.g. localStorage).
     // If not, features like reload-and-profile will not work correctly and must be disabled.
@@ -298,17 +309,31 @@ export default class Agent extends EventEmitter<{|
     return renderer.getInstanceAndStyle(id);
   }
 
-  getIDForNode(node: Object): number | null {
+  getBestMatchingRendererInterface(node: Object): RendererInterface | null {
+    let bestMatch = null;
     for (const rendererID in this._rendererInterfaces) {
       const renderer = ((this._rendererInterfaces[
         (rendererID: any)
       ]: any): RendererInterface);
-
-      try {
-        const id = renderer.getFiberIDForNative(node, true);
-        if (id !== null) {
-          return id;
+      const fiber = renderer.getFiberForNative(node);
+      if (fiber !== null) {
+        // check if fiber.stateNode is matching the original hostInstance
+        if (fiber.stateNode === node) {
+          return renderer;
+        } else if (bestMatch === null) {
+          bestMatch = renderer;
         }
+      }
+    }
+    // if an exact match is not found, return the first valid renderer as fallback
+    return bestMatch;
+  }
+
+  getIDForNode(node: Object): number | null {
+    const rendererInterface = this.getBestMatchingRendererInterface(node);
+    if (rendererInterface != null) {
+      try {
+        return rendererInterface.getFiberIDForNative(node, true);
       } catch (error) {
         // Some old React versions might throw if they can't find a match.
         // If so we should ignore it...
@@ -316,6 +341,13 @@ export default class Agent extends EventEmitter<{|
     }
     return null;
   }
+
+  getBackendVersion = () => {
+    const version = process.env.DEVTOOLS_VERSION;
+    if (version) {
+      this._bridge.send('backendVersion', version);
+    }
+  };
 
   getBridgeProtocol = () => {
     this._bridge.send('bridgeProtocol', currentBridgeProtocol);
@@ -345,6 +377,7 @@ export default class Agent extends EventEmitter<{|
   };
 
   inspectElement = ({
+    forceFullData,
     id,
     path,
     rendererID,
@@ -356,7 +389,7 @@ export default class Agent extends EventEmitter<{|
     } else {
       this._bridge.send(
         'inspectedElement',
-        renderer.inspectElement(requestID, id, path),
+        renderer.inspectElement(requestID, id, path, forceFullData),
       );
 
       // When user selects an element, stop trying to restore the selection,
@@ -635,28 +668,26 @@ export default class Agent extends EventEmitter<{|
     appendComponentStack,
     breakOnConsoleErrors,
     showInlineWarningsAndErrors,
+    hideConsoleLogsInStrictMode,
+    browserTheme,
   }: {|
     appendComponentStack: boolean,
     breakOnConsoleErrors: boolean,
     showInlineWarningsAndErrors: boolean,
+    hideConsoleLogsInStrictMode: boolean,
+    browserTheme: BrowserTheme,
   |}) => {
     // If the frontend preference has change,
     // or in the case of React Native- if the backend is just finding out the preference-
-    // then install or uninstall the console overrides.
+    // then reinstall the console overrides.
     // It's safe to call these methods multiple times, so we don't need to worry about that.
-    if (
-      appendComponentStack ||
-      breakOnConsoleErrors ||
-      showInlineWarningsAndErrors
-    ) {
-      patchConsole({
-        appendComponentStack,
-        breakOnConsoleErrors,
-        showInlineWarningsAndErrors,
-      });
-    } else {
-      unpatchConsole();
-    }
+    patchConsole({
+      appendComponentStack,
+      breakOnConsoleErrors,
+      showInlineWarningsAndErrors,
+      hideConsoleLogsInStrictMode,
+      browserTheme,
+    });
   };
 
   updateComponentFilters = (componentFilters: Array<ComponentFilter>) => {

@@ -2,7 +2,7 @@ version: 2.1
 
 aliases:
   - &docker
-    - image: circleci/openjdk:8-jdk-node-browsers
+    - image: cimg/openjdk:17.0.0-node
 
   - &environment
     TZ: /usr/share/zoneinfo/America/Los_Angeles
@@ -91,61 +91,22 @@ jobs:
       - *restore_node_modules
       - run: node ./scripts/tasks/flow-ci
 
-  RELEASE_CHANNEL_stable_yarn_build:
+  scrape_warning_messages:
     docker: *docker
     environment: *environment
-    parallelism: *TEST_PARALLELISM
-    steps:
-      - checkout
-      - run: yarn workspaces info | head -n -1 > workspace_info.txt
-      - *restore_node_modules
-      - run:
-          environment:
-            RELEASE_CHANNEL: stable
-          command: |
-            ./scripts/circleci/add_build_info_json.sh
-            ./scripts/circleci/update_package_versions.sh
-            yarn build
-      - run: echo "stable" >> build/RELEASE_CHANNEL
-      - persist_to_workspace:
-          root: build
-          paths:
-            - RELEASE_CHANNEL
-            - facebook-www
-            - facebook-react-native
-            - facebook-relay
-            - node_modules
-            - react-native
-            - dist
-            - sizes/*.json
 
-  yarn_build:
-    docker: *docker
-    environment: *environment
-    parallelism: 20
     steps:
       - checkout
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
       - run:
-          environment:
-            RELEASE_CHANNEL: experimental
           command: |
-            ./scripts/circleci/add_build_info_json.sh
-            ./scripts/circleci/update_package_versions.sh
-            yarn build
-      - run: echo "experimental" >> build/RELEASE_CHANNEL
+            mkdir -p ./build
+            node ./scripts/print-warnings/print-warnings.js > build/WARNINGS
       - persist_to_workspace:
-          root: build
+          root: .
           paths:
-            - RELEASE_CHANNEL
-            - facebook-www
-            - facebook-react-native
-            - facebook-relay
-            - node_modules
-            - react-native
-            - dist
-            - sizes/*.json
+            - build
 
   yarn_build_combined:
     docker: *docker
@@ -159,9 +120,30 @@ jobs:
       - persist_to_workspace:
           root: .
           paths:
-            - build2
+            - build
 
-  get_base_build:
+  download_build:
+    docker: *docker
+    environment: *environment
+    parameters:
+      revision:
+        type: string
+    steps:
+      - checkout
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run:
+          name: Download artifacts for revision
+          command: |
+              git fetch origin main
+              cd ./scripts/release && yarn && cd ../../
+              scripts/release/download-experimental-build.js --commit=<< parameters.revision >> --allowBrokenCI
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build
+
+  download_base_build_for_sizebot:
     docker: *docker
     environment: *environment
     steps:
@@ -173,8 +155,16 @@ jobs:
           command: |
               git fetch origin main
               cd ./scripts/release && yarn && cd ../../
-              scripts/release/download-experimental-build.js --commit=$(git merge-base HEAD origin/main)
-              mv ./build2 ./base-build
+              scripts/release/download-experimental-build.js --commit=$(git merge-base HEAD origin/main) --allowBrokenCI
+              mv ./build ./base-build
+      - run:
+          # TODO: The `download-experimental-build` script copies the npm
+          # packages into the `node_modules` directory. This is a historical
+          # quirk of how the release script works. Let's pretend they
+          # don't exist.
+          name: Delete extraneous files
+          command: rm -rf ./base-build/node_modules
+
       - persist_to_workspace:
           root: .
           paths:
@@ -189,11 +179,15 @@ jobs:
           at: .
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
-      - run: echo "<< pipeline.git.revision	>>" >> build2/COMMIT_SHA
+      - run: echo "<< pipeline.git.revision	>>" >> build/COMMIT_SHA
         # Compress build directory into a single tarball for easy download
-      - run: tar -zcvf ./build2.tgz ./build2
+      - run: tar -zcvf ./build.tgz ./build
+        # TODO: Migrate scripts to use `build` directory instead of `build2`
+      - run: cp ./build.tgz ./build2.tgz
       - store_artifacts:
           path: ./build2.tgz
+      - store_artifacts:
+          path: ./build.tgz
 
   sizebot:
     docker: *docker
@@ -202,7 +196,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
-      - run: echo "<< pipeline.git.revision	>>" >> build2/COMMIT_SHA
+      - run: echo "<< pipeline.git.revision	>>" >> build/COMMIT_SHA
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
       - run:
@@ -213,9 +207,9 @@ jobs:
     environment: *environment
     steps:
       - checkout
-      - attach_workspace: *attach_workspace
+      - attach_workspace:
+          at: .
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
-      - *restore_yarn_cache
       - *restore_node_modules
       - run:
           name: Install Packages
@@ -227,7 +221,103 @@ jobs:
       - store_artifacts:
           path: ./build/devtools.tgz
 
+  run_devtools_e2e_tests:
+    docker: *docker
+    environment: *environment
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run:
+          name: Install Packages
+          command: yarn --frozen-lockfile --cache-folder ~/.cache/yarn
+      - run:
+          name: Playwright install deps
+          command: |
+            npx playwright install
+            sudo npx playwright install-deps
+      - run:
+          environment:
+            RELEASE_CHANNEL: experimental
+          command: ./scripts/circleci/run_devtools_e2e_tests.js
+
+  run_devtools_tests_for_versions:
+    docker: *docker
+    environment: *environment
+    parallelism: *TEST_PARALLELISM
+    parameters:
+      version:
+        type: string
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run:
+          name: Install nested packages from Yarn cache
+          command: yarn --frozen-lockfile --cache-folder ~/.cache/yarn
+      - run: ./scripts/circleci/download_devtools_regression_build.js << parameters.version >> --replaceBuild
+      - run: node ./scripts/jest/jest-cli.js --build --project devtools --release-channel=experimental --reactVersion << parameters.version >> --ci
+
+  run_devtools_e2e_tests_for_versions:
+    docker: *docker
+    environment: *environment
+    parallelism: *TEST_PARALLELISM
+    parameters:
+      version:
+        type: string
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run:
+          name: Install nested packages from Yarn cache
+          command: yarn --frozen-lockfile --cache-folder ~/.cache/yarn
+      - run:
+          name: Playwright install deps
+          command: |
+            npx playwright install
+            sudo npx playwright install-deps
+      - run: ./scripts/circleci/download_devtools_regression_build.js << parameters.version >>
+      - run:
+          environment:
+            RELEASE_CHANNEL: experimental
+          command: ./scripts/circleci/run_devtools_e2e_tests.js << parameters.version >>
+      - run:
+          name: Cleanup build regression folder
+          command: rm -r ./build-regression
+      - store_artifacts:
+          path: ./tmp/screenshots
+
   yarn_lint_build:
+    docker: *docker
+    environment: *environment
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run: yarn lint-build
+
+  yarn_check_release_dependencies:
+    docker: *docker
+    environment: *environment
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn workspaces info | head -n -1 > workspace_info.txt
+      - *restore_node_modules
+      - run: yarn check-release-dependencies
+
+
+  check_error_codes:
     docker: *docker
     environment: *environment
     steps:
@@ -235,8 +325,11 @@ jobs:
       - attach_workspace: *attach_workspace
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
-      - run: yarn lint-build
-      - run: scripts/circleci/check_minified_errors.sh
+      - run:
+          name: Search build artifacts for unminified errors
+          command: |
+            yarn extract-errors
+            git diff --quiet || (echo "Found unminified errors. Either update the error codes map or disable error minification for the affected build, if appropriate." && false)
 
   yarn_test:
     docker: *docker
@@ -274,7 +367,8 @@ jobs:
     environment: *environment
     steps:
       - checkout
-      - attach_workspace: *attach_workspace
+      - attach_workspace:
+          at: .
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
       - run:
@@ -334,38 +428,27 @@ jobs:
       - run: yarn workspaces info | head -n -1 > workspace_info.txt
       - *restore_node_modules
       - run:
+          name: Fetch revisions that contain an intentional fork
+          # This will fetch each revision listed in the `forked-revisions` file,
+          # which may be necessary if it's not part of main. For example, it
+          # may have been part of a PR branch that was squashed on merge.
+          command: |
+            cut -d " " -f 1 scripts/merge-fork/forked-revisions | xargs -r git fetch origin
+      - run:
+          name: Revert forked revisions
+          # This will revert the changes without committing. At the end, it's
+          # expected that both forks will be identical.
+          command: |
+            cut -d " " -f 1 scripts/merge-fork/forked-revisions | xargs -r git revert --no-commit
+      - run:
           name: Confirm reconciler forks are the same
           command: |
             yarn replace-fork
-            git diff --quiet || (echo "Reconciler forks are not the same! Run yarn replace-fork. Or, if this was intentional, disable this CI check." && false)
+            git diff --quiet || (echo "Reconciler forks are not the same! Run yarn replace-fork. Or, if this was intentional, add the commit SHA to scripts/merge-fork/forked-revisions." && false)
 
 
 workflows:
   version: 2
-  stable:
-    unless: << pipeline.parameters.prerelease_commit_sha >>
-    jobs:
-      - setup
-      - yarn_lint:
-          requires:
-            - setup
-      - RELEASE_CHANNEL_stable_yarn_build:
-          requires:
-            - setup
-      - RELEASE_CHANNEL_stable_yarn_test_dom_fixtures:
-          requires:
-            - RELEASE_CHANNEL_stable_yarn_build
-
-  experimental:
-    unless: << pipeline.parameters.prerelease_commit_sha >>
-    jobs:
-      - setup
-      - yarn_build:
-          requires:
-            - setup
-      - build_devtools_and_process_artifacts:
-          requires:
-            - yarn_build
 
   # New workflow that will replace "stable" and "experimental"
   build_and_test:
@@ -378,6 +461,9 @@ workflows:
       # NOTE: This job is only enabled when we want the forks to be in sync.
       # When the forks intentionally diverge, comment out the job to disable it.
       - sync_reconciler_forks:
+          requires:
+            - setup
+      - yarn_lint:
           requires:
             - setup
       - yarn_test:
@@ -408,8 +494,12 @@ workflows:
       - yarn_build_combined:
           requires:
             - setup
+      - scrape_warning_messages:
+          requires:
+            - setup
       - process_artifacts_combined:
           requires:
+            - scrape_warning_messages
             - yarn_build_combined
       - yarn_test_build:
           requires:
@@ -439,7 +529,7 @@ workflows:
                 # - "-r=www-modern --env=production --variant=true"
 
                 # TODO: Test more persistent configurations?
-      - get_base_build:
+      - download_base_build_for_sizebot:
           filters:
             branches:
               ignore:
@@ -452,11 +542,27 @@ workflows:
               ignore:
                 - main
           requires:
-            - get_base_build
+            - download_base_build_for_sizebot
             - yarn_build_combined
       - yarn_lint_build:
           requires:
             - yarn_build_combined
+      - yarn_check_release_dependencies:
+          requires:
+            - yarn_build_combined
+      - check_error_codes:
+          requires:
+            - yarn_build_combined
+      - RELEASE_CHANNEL_stable_yarn_test_dom_fixtures:
+          requires:
+            - yarn_build_combined
+      - build_devtools_and_process_artifacts:
+          requires:
+            - yarn_build_combined
+      - run_devtools_e2e_tests:
+          requires:
+            - build_devtools_and_process_artifacts
+
   fuzz_tests:
     unless: << pipeline.parameters.prerelease_commit_sha >>
     triggers:
@@ -473,6 +579,48 @@ workflows:
           requires:
             - setup
 
+  devtools_regression_tests:
+    unless: << pipeline.parameters.prerelease_commit_sha >>
+    triggers:
+      - schedule:
+          # DevTools regression tests run once a day
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - setup
+      - download_build:
+          requires:
+            - setup
+          revision: << pipeline.git.revision >>
+      - build_devtools_and_process_artifacts:
+          requires:
+            - download_build
+      - run_devtools_tests_for_versions:
+          requires:
+            - build_devtools_and_process_artifacts
+          matrix:
+            parameters:
+              version:
+                - "16.0"
+                - "16.5" # schedule package
+                - "16.8" # hooks
+                - "17.0"
+                - "18.0"
+      - run_devtools_e2e_tests_for_versions:
+          requires:
+            - build_devtools_and_process_artifacts
+          matrix:
+            parameters:
+              version:
+                - "16.0"
+                - "16.5" # schedule package
+                - "16.8" # hooks
+                - "17.0"
+                - "18.0"
+
   # Used to publish a prerelease manually via the command line
   publish_preleases:
     when: << pipeline.parameters.prerelease_commit_sha >>
@@ -484,7 +632,7 @@ workflows:
             - setup
           commit_sha: << pipeline.parameters.prerelease_commit_sha >>
           release_channel: stable
-          dist_tag: "next,alpha"
+          dist_tag: "next"
       - publish_prerelease:
           name: Publish to Experimental channel
           requires:
@@ -516,7 +664,7 @@ workflows:
             - setup
           commit_sha: << pipeline.git.revision >>
           release_channel: stable
-          dist_tag: "next,alpha"
+          dist_tag: "next"
       - publish_prerelease:
           name: Publish to Experimental channel
           requires:
