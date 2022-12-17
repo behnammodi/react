@@ -115,7 +115,17 @@ function createPanelIfReactLoaded() {
 
       const tabId = chrome.devtools.inspectedWindow.tabId;
 
-      registerDevToolsEventLogger('extension');
+      registerDevToolsEventLogger('extension', async () => {
+        // TODO: after we upgrade to Manifest V3, chrome.tabs.query returns a Promise
+        // without the callback.
+        return new Promise(resolve => {
+          chrome.tabs.query({active: true, currentWindow: true}, tabs => {
+            resolve({
+              page_url: tabs[0]?.url,
+            });
+          });
+        });
+      });
 
       function initBridgeAndStore() {
         const port = chrome.runtime.connect({
@@ -243,6 +253,10 @@ function createPanelIfReactLoaded() {
               `);
             }, 100);
           }
+        };
+
+        const viewUrlSourceFunction = (url, line, col) => {
+          chrome.devtools.panels.openResource(url, line, col);
         };
 
         let debugIDCounter = 0;
@@ -381,6 +395,7 @@ function createPanelIfReactLoaded() {
               warnIfUnsupportedVersionDetected: true,
               viewAttributeSourceFunction,
               viewElementSourceFunction,
+              viewUrlSourceFunction,
             }),
           );
         };
@@ -457,7 +472,7 @@ function createPanelIfReactLoaded() {
       let needsToSyncElementSelection = false;
 
       chrome.devtools.panels.create(
-        isChrome ? '⚛️ Components' : 'Components',
+        isChrome || isEdge ? '⚛️ Components' : 'Components',
         '',
         'panel.html',
         extensionPanel => {
@@ -488,7 +503,7 @@ function createPanelIfReactLoaded() {
       );
 
       chrome.devtools.panels.create(
-        isChrome ? '⚛️ Profiler' : 'Profiler',
+        isChrome || isEdge ? '⚛️ Profiler' : 'Profiler',
         '',
         'panel.html',
         extensionPanel => {

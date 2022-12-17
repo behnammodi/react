@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,6 +14,7 @@ let useSyncExternalStoreWithSelector;
 let React;
 let ReactDOM;
 let ReactDOMClient;
+let ReactFeatureFlags;
 let Scheduler;
 let act;
 let useState;
@@ -48,6 +49,7 @@ describe('Shared useSyncExternalStore behavior (shim and built-in)', () => {
     React = require('react');
     ReactDOM = require('react-dom');
     ReactDOMClient = require('react-dom/client');
+    ReactFeatureFlags = require('shared/ReactFeatureFlags');
     Scheduler = require('scheduler');
     useState = React.useState;
     useEffect = React.useEffect;
@@ -882,8 +884,7 @@ describe('Shared useSyncExternalStore behavior (shim and built-in)', () => {
 
   describe('selector and isEqual error handling in extra', () => {
     let ErrorBoundary;
-    beforeAll(() => {
-      spyOnDev(console, 'warn');
+    beforeEach(() => {
       ErrorBoundary = class extends React.Component {
         state = {error: null};
         static getDerivedStateFromError(error) {
@@ -900,7 +901,12 @@ describe('Shared useSyncExternalStore behavior (shim and built-in)', () => {
 
     it('selector can throw on update', async () => {
       const store = createExternalStore({a: 'a'});
-      const selector = state => state.a.toUpperCase();
+      const selector = state => {
+        if (typeof state.a !== 'string') {
+          throw new TypeError('Malformed state');
+        }
+        return state.a.toUpperCase();
+      };
 
       function App() {
         const a = useSyncExternalStoreWithSelector(
@@ -924,18 +930,27 @@ describe('Shared useSyncExternalStore behavior (shim and built-in)', () => {
 
       expect(container.textContent).toEqual('A');
 
-      await act(() => {
-        store.set({});
-      });
-      expect(container.textContent).toEqual(
-        "Cannot read property 'toUpperCase' of undefined",
+      await expect(async () => {
+        await act(async () => {
+          store.set({});
+        });
+      }).toWarnDev(
+        ReactFeatureFlags.enableUseRefAccessWarning
+          ? ['Warning: App: Unsafe read of a mutable value during render.']
+          : [],
       );
+      expect(container.textContent).toEqual('Malformed state');
     });
 
     it('isEqual can throw on update', async () => {
       const store = createExternalStore({a: 'A'});
       const selector = state => state.a;
-      const isEqual = (left, right) => left.a.trim() === right.a.trim();
+      const isEqual = (left, right) => {
+        if (typeof left.a !== 'string' || typeof right.a !== 'string') {
+          throw new TypeError('Malformed state');
+        }
+        return left.a.trim() === right.a.trim();
+      };
 
       function App() {
         const a = useSyncExternalStoreWithSelector(
@@ -960,12 +975,16 @@ describe('Shared useSyncExternalStore behavior (shim and built-in)', () => {
 
       expect(container.textContent).toEqual('A');
 
-      await act(() => {
-        store.set({});
-      });
-      expect(container.textContent).toEqual(
-        "Cannot read property 'trim' of undefined",
+      await expect(async () => {
+        await act(() => {
+          store.set({});
+        });
+      }).toWarnDev(
+        ReactFeatureFlags.enableUseRefAccessWarning
+          ? ['Warning: App: Unsafe read of a mutable value during render.']
+          : [],
       );
+      expect(container.textContent).toEqual('Malformed state');
     });
   });
 });

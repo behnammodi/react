@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,7 @@
  */
 
 import type {HostComponent} from './ReactNativeTypes';
-import type {ReactNodeList} from 'shared/ReactTypes';
+import type {ReactPortal, ReactNodeList} from 'shared/ReactTypes';
 import type {ElementRef, Element, ElementType} from 'react';
 
 import './ReactNativeInjection';
@@ -36,18 +36,23 @@ import {
   UIManager,
   legacySendAccessibilityEvent,
 } from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
-import {getInspectorDataForInstance} from './ReactNativeFiberInspector';
 
 import {getClosestInstanceFromNode} from './ReactNativeComponentTree';
 import {
   getInspectorDataForViewTag,
   getInspectorDataForViewAtPoint,
+  getInspectorDataForInstance,
 } from './ReactNativeFiberInspector';
 import {LegacyRoot} from 'react-reconciler/src/ReactRootTags';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
 import getComponentNameFromType from 'shared/getComponentNameFromType';
 
 const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
+
+const {
+  sendAccessibilityEvent: fabricSendAccessibilityEvent,
+  dispatchCommand: fabricDispatchCommand,
+} = nativeFabricUIManager;
 
 function findHostInstance_DEPRECATED(
   componentOrHandle: any,
@@ -96,6 +101,7 @@ function findHostInstance_DEPRECATED(
     return (hostInstance: any).canonical;
   }
   // $FlowFixMe[incompatible-return]
+  // $FlowFixMe[incompatible-exact]
   return hostInstance;
 }
 
@@ -164,7 +170,7 @@ function dispatchCommand(handle: any, command: string, args: Array<any>) {
   if (handle._internalInstanceHandle != null) {
     const {stateNode} = handle._internalInstanceHandle;
     if (stateNode != null) {
-      nativeFabricUIManager.dispatchCommand(stateNode.node, command, args);
+      fabricDispatchCommand(stateNode.node, command, args);
     }
   } else {
     UIManager.dispatchViewManagerCommand(handle._nativeTag, command, args);
@@ -185,7 +191,7 @@ function sendAccessibilityEvent(handle: any, eventType: string) {
   if (handle._internalInstanceHandle != null) {
     const {stateNode} = handle._internalInstanceHandle;
     if (stateNode != null) {
-      nativeFabricUIManager.sendAccessibilityEvent(stateNode.node, eventType);
+      fabricSendAccessibilityEvent(stateNode.node, eventType);
     }
   } else {
     legacySendAccessibilityEvent(handle._nativeTag, eventType);
@@ -222,7 +228,7 @@ function render(
   }
   updateContainer(element, root, null, callback);
 
-  // $FlowIssue Flow has hardcoded values for React DOM that don't work with RN
+  // $FlowFixMe Flow has hardcoded values for React DOM that don't work with RN
   return getPublicRootInstance(root);
 }
 
@@ -247,7 +253,7 @@ function createPortal(
   children: ReactNodeList,
   containerTag: number,
   key: ?string = null,
-) {
+): ReactPortal {
   return createPortalImpl(children, containerTag, null, key);
 }
 

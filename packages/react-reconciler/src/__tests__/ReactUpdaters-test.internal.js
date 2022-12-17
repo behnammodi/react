@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -81,11 +81,7 @@ describe('updaters', () => {
     };
 
     jest.mock(
-      'react-reconciler/src/ReactFiberDevToolsHook.old',
-      () => mockDevToolsHook,
-    );
-    jest.mock(
-      'react-reconciler/src/ReactFiberDevToolsHook.new',
+      'react-reconciler/src/ReactFiberDevToolsHook',
       () => mockDevToolsHook,
     );
 

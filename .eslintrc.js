@@ -59,7 +59,7 @@ module.exports = {
     'space-before-blocks': ERROR,
     'space-before-function-paren': OFF,
     'valid-typeof': [ERROR, {requireStringLiterals: true}],
-    // Flow fails with with non-string literal keys
+    // Flow fails with non-string literal keys
     'no-useless-computed-key': OFF,
 
     // We apply these settings to files that should run on Node.
@@ -112,14 +112,6 @@ module.exports = {
     'react-internal/no-to-warn-dev-within-to-throw': ERROR,
     'react-internal/warning-args': ERROR,
     'react-internal/no-production-logging': ERROR,
-    'react-internal/no-cross-fork-imports': ERROR,
-    'react-internal/no-cross-fork-types': [
-      ERROR,
-      {
-        old: [],
-        new: [],
-      },
-    ],
   },
 
   overrides: [
@@ -140,8 +132,6 @@ module.exports = {
         'packages/react-dom/src/test-utils/**/*.js',
         'packages/react-devtools-shared/**/*.js',
         'packages/react-noop-renderer/**/*.js',
-        'packages/react-pg/**/*.js',
-        'packages/react-fs/**/*.js',
         'packages/react-refresh/**/*.js',
         'packages/react-server-dom-webpack/**/*.js',
         'packages/react-test-renderer/**/*.js',
@@ -276,5 +266,7 @@ module.exports = {
     gate: 'readonly',
     trustedTypes: 'readonly',
     IS_REACT_ACT_ENVIRONMENT: 'readonly',
+    AsyncLocalStorage: 'readonly',
+    globalThis: 'readonly',
   },
 };
