@@ -48,12 +48,8 @@ export default function InspectedElementWrapper(_: Props): React.Node {
   } = useContext(OptionsContext);
   const {dispatch: modalDialogDispatch} = useContext(ModalDialogContext);
 
-  const {
-    hookNames,
-    inspectedElement,
-    parseHookNames,
-    toggleParseHookNames,
-  } = useContext(InspectedElementContext);
+  const {hookNames, inspectedElement, parseHookNames, toggleParseHookNames} =
+    useContext(InspectedElementContext);
 
   const element =
     inspectedElementID !== null
@@ -241,7 +237,7 @@ export default function InspectedElementWrapper(_: Props): React.Node {
     strictModeBadge = (
       <a
         className={styles.StrictModeNonCompliant}
-        href="https://fb.me/devtools-strict-mode"
+        href="https://react.dev/reference/react/StrictMode"
         rel="noopener noreferrer"
         target="_blank"
         title="This component is not running in StrictMode. Click to learn more.">

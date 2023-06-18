@@ -26,10 +26,6 @@ export function flushBuffered(destination: Destination) {
   // transform streams. https://github.com/whatwg/streams/issues/960
 }
 
-// AsyncLocalStorage is not available in bun
-export const supportsRequestStorage = false;
-export const requestStorage = (null: any);
-
 export function beginWriting(destination: Destination) {}
 
 export function writeChunk(
@@ -70,10 +66,13 @@ export function clonePrecomputedChunk(
   return chunk;
 }
 
+export function byteLengthOfChunk(chunk: Chunk | PrecomputedChunk): number {
+  return Buffer.byteLength(chunk, 'utf8');
+}
+
 export function closeWithError(destination: Destination, error: mixed): void {
-  // $FlowFixMe[method-unbinding]
   if (typeof destination.error === 'function') {
-    // $FlowFixMe: This is an Error object or the destination accepts other types.
+    // $FlowFixMe[incompatible-call]: This is an Error object or the destination accepts other types.
     destination.error(error);
   } else {
     // Earlier implementations doesn't support this method. In that environment you're

@@ -38,7 +38,7 @@ export default function setupHighlighter(
     registerListenersOnWindow(window);
   }
 
-  function registerListenersOnWindow(window) {
+  function registerListenersOnWindow(window: any) {
     // This plug-in may run in non-DOM environments (e.g. React Native).
     if (window && typeof window.addEventListener === 'function') {
       window.addEventListener('click', onClick, true);
@@ -46,7 +46,7 @@ export default function setupHighlighter(
       window.addEventListener('mouseover', onMouseEvent, true);
       window.addEventListener('mouseup', onMouseEvent, true);
       window.addEventListener('pointerdown', onPointerDown, true);
-      window.addEventListener('pointerover', onPointerOver, true);
+      window.addEventListener('pointermove', onPointerMove, true);
       window.addEventListener('pointerup', onPointerUp, true);
     } else {
       agent.emit('startInspectingNative');
@@ -56,7 +56,7 @@ export default function setupHighlighter(
   function stopInspectingNative() {
     hideOverlay(agent);
     removeListenersOnWindow(window);
-    iframesListeningTo.forEach(function(frame) {
+    iframesListeningTo.forEach(function (frame) {
       try {
         removeListenersOnWindow(frame.contentWindow);
       } catch (error) {
@@ -66,7 +66,7 @@ export default function setupHighlighter(
     iframesListeningTo = new Set();
   }
 
-  function removeListenersOnWindow(window) {
+  function removeListenersOnWindow(window: any) {
     // This plug-in may run in non-DOM environments (e.g. React Native).
     if (window && typeof window.removeEventListener === 'function') {
       window.removeEventListener('click', onClick, true);
@@ -74,7 +74,7 @@ export default function setupHighlighter(
       window.removeEventListener('mouseover', onMouseEvent, true);
       window.removeEventListener('mouseup', onMouseEvent, true);
       window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('pointerover', onPointerOver, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
       window.removeEventListener('pointerup', onPointerUp, true);
     } else {
       agent.emit('stopInspectingNative');
@@ -151,14 +151,17 @@ export default function setupHighlighter(
     event.preventDefault();
     event.stopPropagation();
 
-    selectFiberForNode(((event.target: any): HTMLElement));
+    selectFiberForNode(getEventTarget(event));
   }
 
-  function onPointerOver(event: MouseEvent) {
+  let lastHoveredNode: HTMLElement | null = null;
+  function onPointerMove(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
 
-    const target = ((event.target: any): HTMLElement);
+    const target: HTMLElement = getEventTarget(event);
+    if (lastHoveredNode === target) return;
+    lastHoveredNode = target;
 
     if (target.tagName === 'IFRAME') {
       const iframe: HTMLIFrameElement = (target: any);
@@ -197,4 +200,12 @@ export default function setupHighlighter(
     // because those are usually unintentional as you lift the cursor.
     {leading: false},
   );
+
+  function getEventTarget(event: MouseEvent): HTMLElement {
+    if (event.composed) {
+      return (event.composedPath()[0]: any);
+    }
+
+    return (event.target: any);
+  }
 }
