@@ -22,7 +22,6 @@ let waitFor;
 
 describe('useSubscription', () => {
   beforeEach(() => {
-    jest.resetModules();
     jest.mock('scheduler', () => require('scheduler/unstable_mock'));
 
     useSubscription = require('use-subscription').useSubscription;
@@ -84,7 +83,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription source={observable} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
     assertLog(['default']);
@@ -136,7 +135,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription source={observable} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
     assertLog(['initial']);
@@ -185,7 +184,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription source={observableA} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
 
@@ -244,7 +243,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription source={observableA} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
 
@@ -331,7 +330,7 @@ describe('useSubscription', () => {
     let renderer;
     await act(() => {
       renderer = ReactTestRenderer.create(<Parent observed={observableA} />, {
-        unstable_isConcurrent: true,
+        isConcurrent: true,
       });
     });
     assertLog(['Child: a-0', 'Grandchild: a-0']);
@@ -434,7 +433,7 @@ describe('useSubscription', () => {
     let renderer;
     await act(() => {
       renderer = ReactTestRenderer.create(<Parent observed={observableA} />, {
-        unstable_isConcurrent: true,
+        isConcurrent: true,
       });
     });
     assertLog(['Child: a-0', 'Grandchild: a-0']);
@@ -532,7 +531,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription source={eventHandler} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
     assertLog([true]);
@@ -566,7 +565,7 @@ describe('useSubscription', () => {
     await act(() => {
       renderer = ReactTestRenderer.create(
         <Subscription subscription={subscription1} />,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
     });
     await waitForAll([]);
@@ -607,7 +606,7 @@ describe('useSubscription', () => {
           <Subscriber id="first" />
           <Subscriber id="second" />
         </React.Fragment>,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       );
       await waitForAll(['render:first:A', 'render:second:A']);
 

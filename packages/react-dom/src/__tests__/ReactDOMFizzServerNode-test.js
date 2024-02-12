@@ -17,7 +17,6 @@ let Suspense;
 
 describe('ReactDOMFizzServerNode', () => {
   beforeEach(() => {
-    jest.resetModules();
     React = require('react');
     ReactDOMFizzServer = require('react-dom/server');
     Stream = require('stream');
@@ -98,7 +97,7 @@ describe('ReactDOMFizzServerNode', () => {
     pipe(writable);
     jest.runAllTimers();
     expect(output.result).toMatchInlineSnapshot(
-      `"<link rel="preload" href="init.js" as="script"/><link rel="modulepreload" href="init.mjs"/><div>hello world</div><script>INIT();</script><script src="init.js" async=""></script><script type="module" src="init.mjs" async=""></script>"`,
+      `"<link rel="preload" as="script" fetchPriority="low" href="init.js"/><link rel="modulepreload" fetchPriority="low" href="init.mjs"/><div>hello world</div><script>INIT();</script><script src="init.js" async=""></script><script type="module" src="init.mjs" async=""></script>"`,
     );
   });
 

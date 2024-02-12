@@ -11,12 +11,13 @@
 
 describe('ReactChildren', () => {
   let React;
-  let ReactTestUtils;
+  let ReactDOMClient;
+  let act;
 
   beforeEach(() => {
-    jest.resetModules();
     React = require('react');
-    ReactTestUtils = require('react-dom/test-utils');
+    ReactDOMClient = require('react-dom/client');
+    act = require('internal-test-utils').act;
   });
 
   it('should support identity for simple', () => {
@@ -947,6 +948,28 @@ describe('ReactChildren', () => {
     );
   });
 
+  it('should throw on React.lazy', async () => {
+    const lazyElement = React.lazy(async () => ({default: <div />}));
+    await expect(() => {
+      React.Children.forEach([lazyElement], () => {}, null);
+    }).toThrowError(
+      'Cannot render an Async Component, Promise or React.Lazy inside React.Children. ' +
+        'We recommend not iterating over children and just rendering them plain.',
+      {withoutStack: true}, // There's nothing on the stack
+    );
+  });
+
+  it('should throw on Promises', async () => {
+    const promise = Promise.resolve(<div />);
+    await expect(() => {
+      React.Children.forEach([promise], () => {}, null);
+    }).toThrowError(
+      'Cannot render an Async Component, Promise or React.Lazy inside React.Children. ' +
+        'We recommend not iterating over children and just rendering them plain.',
+      {withoutStack: true}, // There's nothing on the stack
+    );
+  });
+
   it('should throw on regex', () => {
     // Really, we care about dates (#4840) but those have nondeterministic
     // serialization (timezones) so let's test a regex instead:
@@ -962,16 +985,20 @@ describe('ReactChildren', () => {
   });
 
   describe('with fragments enabled', () => {
-    it('warns for keys for arrays of elements in a fragment', () => {
+    it('warns for keys for arrays of elements in a fragment', async () => {
       class ComponentReturningArray extends React.Component {
         render() {
           return [<div />, <div />];
         }
       }
 
-      expect(() =>
-        ReactTestUtils.renderIntoDocument(<ComponentReturningArray />),
-      ).toErrorDev(
+      const container = document.createElement('div');
+      const root = ReactDOMClient.createRoot(container);
+      await expect(async () => {
+        await act(() => {
+          root.render(<ComponentReturningArray />);
+        });
+      }).toErrorDev(
         'Warning: ' +
           'Each child in a list should have a unique "key" prop.' +
           ' See https://reactjs.org/link/warning-keys for more information.' +
@@ -979,20 +1006,28 @@ describe('ReactChildren', () => {
       );
     });
 
-    it('does not warn when there are keys on elements in a fragment', () => {
+    it('does not warn when there are keys on elements in a fragment', async () => {
       class ComponentReturningArray extends React.Component {
         render() {
           return [<div key="foo" />, <div key="bar" />];
         }
       }
 
-      ReactTestUtils.renderIntoDocument(<ComponentReturningArray />);
+      const container = document.createElement('div');
+      const root = ReactDOMClient.createRoot(container);
+      await act(() => {
+        root.render(<ComponentReturningArray />);
+      });
     });
 
-    it('warns for keys for arrays at the top level', () => {
-      expect(() =>
-        ReactTestUtils.renderIntoDocument([<div />, <div />]),
-      ).toErrorDev(
+    it('warns for keys for arrays at the top level', async () => {
+      const container = document.createElement('div');
+      const root = ReactDOMClient.createRoot(container);
+      await expect(async () => {
+        await act(() => {
+          root.render([<div />, <div />]);
+        });
+      }).toErrorDev(
         'Warning: ' +
           'Each child in a list should have a unique "key" prop.' +
           ' See https://reactjs.org/link/warning-keys for more information.',

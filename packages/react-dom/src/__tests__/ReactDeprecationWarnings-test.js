@@ -16,7 +16,6 @@ let waitForAll;
 
 describe('ReactDeprecationWarnings', () => {
   beforeEach(() => {
-    jest.resetModules();
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     const InternalTestUtils = require('internal-test-utils');
@@ -95,7 +94,10 @@ describe('ReactDeprecationWarnings', () => {
     }
     class Component extends React.Component {
       render() {
-        return <RefComponent ref="refComponent" __self={this} />;
+        return React.createElement(RefComponent, {
+          ref: 'refComponent',
+          __self: this,
+        });
       }
     }
     expect(() => {
@@ -114,7 +116,10 @@ describe('ReactDeprecationWarnings', () => {
     }
     class Component extends React.Component {
       render() {
-        return <RefComponent ref="refComponent" __self={{}} />;
+        return React.createElement(RefComponent, {
+          ref: 'refComponent',
+          __self: {},
+        });
       }
     }
 
@@ -125,6 +130,10 @@ describe('ReactDeprecationWarnings', () => {
         'This case cannot be automatically converted to an arrow function. ' +
         'We ask you to manually fix this case by using useRef() or createRef() instead. ' +
         'Learn more about using refs safely here: ' +
+        'https://reactjs.org/link/strict-mode-string-ref',
+      'Warning: Component "Component" contains the string ref "refComponent". ' +
+        'Support for string refs will be removed in a future major release. We recommend ' +
+        'using useRef() or createRef() instead. Learn more about using refs safely here: ' +
         'https://reactjs.org/link/strict-mode-string-ref',
     ]);
   });
@@ -150,14 +159,18 @@ describe('ReactDeprecationWarnings', () => {
       }
 
       ReactNoop.render(<Component />);
-      await expect(async () => await waitForAll([])).toErrorDev(
+      await expect(async () => await waitForAll([])).toErrorDev([
         'Warning: Component "Component" contains the string ref "refComponent". ' +
           'Support for string refs will be removed in a future major release. ' +
           'This case cannot be automatically converted to an arrow function. ' +
           'We ask you to manually fix this case by using useRef() or createRef() instead. ' +
           'Learn more about using refs safely here: ' +
           'https://reactjs.org/link/strict-mode-string-ref',
-      );
+        'Warning: Component "Component" contains the string ref "refComponent". ' +
+          'Support for string refs will be removed in a future major release. We recommend ' +
+          'using useRef() or createRef() instead. Learn more about using refs safely here: ' +
+          'https://reactjs.org/link/strict-mode-string-ref',
+      ]);
     });
   }
 });

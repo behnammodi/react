@@ -27,7 +27,6 @@ import {
   REACT_PORTAL_TYPE,
   REACT_LAZY_TYPE,
   REACT_CONTEXT_TYPE,
-  REACT_SERVER_CONTEXT_TYPE,
 } from 'shared/ReactSymbols';
 import {ClassComponent, HostText, HostPortal, Fragment} from './ReactWorkTags';
 import isArray from 'shared/isArray';
@@ -130,14 +129,6 @@ function coerceRef(
   ) {
     if (__DEV__) {
       if (
-        // We warn in ReactElement.js if owner and self are equal for string refs
-        // because these cannot be automatically converted to an arrow function
-        // using a codemod. Therefore, we don't have to warn about string refs again.
-        !(
-          element._owner &&
-          element._self &&
-          element._owner.stateNode !== element._self
-        ) &&
         // Will already throw with "Function components cannot have string refs"
         !(
           element._owner &&
@@ -447,7 +438,6 @@ function createChildReconciler(
         existing.ref = coerceRef(returnFiber, current, element);
         existing.return = returnFiber;
         if (__DEV__) {
-          existing._debugSource = element._source;
           existing._debugOwner = element._owner;
         }
         return existing;
@@ -577,10 +567,7 @@ function createChildReconciler(
         return createChild(returnFiber, unwrapThenable(thenable), lanes);
       }
 
-      if (
-        newChild.$$typeof === REACT_CONTEXT_TYPE ||
-        newChild.$$typeof === REACT_SERVER_CONTEXT_TYPE
-      ) {
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
         const context: ReactContext<mixed> = (newChild: any);
         return createChild(
           returnFiber,
@@ -667,10 +654,7 @@ function createChildReconciler(
         );
       }
 
-      if (
-        newChild.$$typeof === REACT_CONTEXT_TYPE ||
-        newChild.$$typeof === REACT_SERVER_CONTEXT_TYPE
-      ) {
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
         const context: ReactContext<mixed> = (newChild: any);
         return updateSlot(
           returnFiber,
@@ -756,10 +740,7 @@ function createChildReconciler(
         );
       }
 
-      if (
-        newChild.$$typeof === REACT_CONTEXT_TYPE ||
-        newChild.$$typeof === REACT_SERVER_CONTEXT_TYPE
-      ) {
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
         const context: ReactContext<mixed> = (newChild: any);
         return updateFromMap(
           existingChildren,
@@ -1244,7 +1225,6 @@ function createChildReconciler(
             const existing = useFiber(child, element.props.children);
             existing.return = returnFiber;
             if (__DEV__) {
-              existing._debugSource = element._source;
               existing._debugOwner = element._owner;
             }
             return existing;
@@ -1270,7 +1250,6 @@ function createChildReconciler(
             existing.ref = coerceRef(returnFiber, child, element);
             existing.return = returnFiber;
             if (__DEV__) {
-              existing._debugSource = element._source;
               existing._debugOwner = element._owner;
             }
             return existing;
@@ -1442,10 +1421,7 @@ function createChildReconciler(
         );
       }
 
-      if (
-        newChild.$$typeof === REACT_CONTEXT_TYPE ||
-        newChild.$$typeof === REACT_SERVER_CONTEXT_TYPE
-      ) {
+      if (newChild.$$typeof === REACT_CONTEXT_TYPE) {
         const context: ReactContext<mixed> = (newChild: any);
         return reconcileChildFibersImpl(
           returnFiber,

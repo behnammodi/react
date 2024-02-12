@@ -13,8 +13,6 @@ let assertLog;
 
 describe('ReactLazyContextPropagation', () => {
   beforeEach(() => {
-    jest.resetModules();
-
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
@@ -23,7 +21,7 @@ describe('ReactLazyContextPropagation', () => {
     useContext = React.useContext;
     Suspense = React.Suspense;
     if (gate(flags => flags.enableSuspenseList)) {
-      SuspenseList = React.SuspenseList;
+      SuspenseList = React.unstable_SuspenseList;
     }
 
     const InternalTestUtils = require('internal-test-utils');

@@ -11,7 +11,6 @@
 
 import {
   REACT_CONTEXT_TYPE,
-  REACT_SERVER_CONTEXT_TYPE,
   REACT_ELEMENT_TYPE,
   REACT_FORWARD_REF_TYPE,
   REACT_FRAGMENT_TYPE,
@@ -44,7 +43,6 @@ export function typeOf(object: any): mixed {
             const $$typeofType = type && type.$$typeof;
 
             switch ($$typeofType) {
-              case REACT_SERVER_CONTEXT_TYPE:
               case REACT_CONTEXT_TYPE:
               case REACT_FORWARD_REF_TYPE:
               case REACT_LAZY_TYPE:
@@ -78,36 +76,6 @@ export const SuspenseList = REACT_SUSPENSE_LIST_TYPE;
 
 export {isValidElementType};
 
-let hasWarnedAboutDeprecatedIsAsyncMode = false;
-let hasWarnedAboutDeprecatedIsConcurrentMode = false;
-
-// AsyncMode should be deprecated
-export function isAsyncMode(object: any): boolean {
-  if (__DEV__) {
-    if (!hasWarnedAboutDeprecatedIsAsyncMode) {
-      hasWarnedAboutDeprecatedIsAsyncMode = true;
-      // Using console['warn'] to evade Babel and ESLint
-      console['warn'](
-        'The ReactIs.isAsyncMode() alias has been deprecated, ' +
-          'and will be removed in React 18+.',
-      );
-    }
-  }
-  return false;
-}
-export function isConcurrentMode(object: any): boolean {
-  if (__DEV__) {
-    if (!hasWarnedAboutDeprecatedIsConcurrentMode) {
-      hasWarnedAboutDeprecatedIsConcurrentMode = true;
-      // Using console['warn'] to evade Babel and ESLint
-      console['warn'](
-        'The ReactIs.isConcurrentMode() alias has been deprecated, ' +
-          'and will be removed in React 18+.',
-      );
-    }
-  }
-  return false;
-}
 export function isContextConsumer(object: any): boolean {
   return typeOf(object) === REACT_CONTEXT_TYPE;
 }

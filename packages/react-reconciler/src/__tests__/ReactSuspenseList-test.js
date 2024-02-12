@@ -11,15 +11,13 @@ let waitFor;
 
 describe('ReactSuspenseList', () => {
   beforeEach(() => {
-    jest.resetModules();
-
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
     Profiler = React.Profiler;
     Suspense = React.Suspense;
     if (gate(flags => flags.enableSuspenseList)) {
-      SuspenseList = React.SuspenseList;
+      SuspenseList = React.unstable_SuspenseList;
     }
 
     const InternalTestUtils = require('internal-test-utils');

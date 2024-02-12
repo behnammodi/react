@@ -18,7 +18,7 @@ let assertLog;
 let getCacheForType;
 let useState;
 let Suspense;
-let Offscreen;
+let Activity;
 let startTransition;
 
 let caches;
@@ -37,8 +37,6 @@ describe('ReactInteractionTracing', () => {
       .join(', ');
   }
   beforeEach(() => {
-    jest.resetModules();
-
     React = require('react');
     ReactNoop = require('react-noop-renderer');
     Scheduler = require('scheduler');
@@ -52,7 +50,7 @@ describe('ReactInteractionTracing', () => {
     useState = React.useState;
     startTransition = React.startTransition;
     Suspense = React.Suspense;
-    Offscreen = React.unstable_Offscreen;
+    Activity = React.unstable_Activity;
 
     getCacheForType = React.unstable_getCacheForType;
 
@@ -2180,11 +2178,11 @@ describe('ReactInteractionTracing', () => {
           <Suspense fallback={<Text text="Loading..." />}>
             <AsyncText text="Text" />
           </Suspense>
-          <Offscreen mode="hidden">
+          <Activity mode="hidden">
             <Suspense fallback={<Text text="Hidden Loading..." />}>
               <AsyncText text="Hidden Text" />
             </Suspense>
-          </Offscreen>
+          </Activity>
         </React.unstable_TracingMarker>
       );
     }

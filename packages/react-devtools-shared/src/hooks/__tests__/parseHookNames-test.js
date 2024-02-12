@@ -48,8 +48,6 @@ describe('parseHookNames', () => {
   let parseHookNames;
 
   beforeEach(() => {
-    jest.resetModules();
-
     jest.mock('source-map-support', () => {
       console.trace('source-map-support');
     });
@@ -70,9 +68,8 @@ describe('parseHookNames', () => {
       const hooksList = flattenHooksList(hooksTree);
 
       // Runs in the UI thread so it can share Network cache:
-      const locationKeyToHookSourceAndMetadata = await loadSourceAndMetadata(
-        hooksList,
-      );
+      const locationKeyToHookSourceAndMetadata =
+        await loadSourceAndMetadata(hooksList);
 
       // Runs in a Worker because it's CPU intensive:
       return parseSourceAndMetadata(

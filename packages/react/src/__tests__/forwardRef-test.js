@@ -16,7 +16,6 @@ describe('forwardRef', () => {
   let waitForAll;
 
   beforeEach(() => {
-    jest.resetModules();
     PropTypes = require('prop-types');
     React = require('react');
     ReactNoop = require('react-noop-renderer');
@@ -86,12 +85,11 @@ describe('forwardRef', () => {
       );
     }
 
-    const RefForwardingComponent = React.forwardRef(function NamedFunction(
-      props,
-      ref,
-    ) {
-      return <FunctionComponent {...props} forwardedRef={ref} />;
-    });
+    const RefForwardingComponent = React.forwardRef(
+      function NamedFunction(props, ref) {
+        return <FunctionComponent {...props} forwardedRef={ref} />;
+      },
+    );
     RefForwardingComponent.propTypes = {
       optional: PropTypes.string,
       required: PropTypes.string.isRequired,

@@ -23,11 +23,17 @@ export const enableLazyContextPropagation = __VARIANT__;
 export const forceConcurrentByDefaultForTesting = __VARIANT__;
 export const enableUnifiedSyncLane = __VARIANT__;
 export const enableTransitionTracing = __VARIANT__;
-export const enableCustomElementPropertySupport = __VARIANT__;
 export const enableDeferRootSchedulingToMicrotask = __VARIANT__;
-export const diffInCommitPhase = __VARIANT__;
 export const enableAsyncActions = __VARIANT__;
+export const enableFormActions = __VARIANT__;
 export const alwaysThrottleRetries = __VARIANT__;
+export const enableDO_NOT_USE_disableStrictPassiveEffect = __VARIANT__;
+export const enableUseDeferredValueInitialArg = __VARIANT__;
+
+export const enableRetryLaneExpiration = __VARIANT__;
+export const retryLaneExpirationMs = 5000;
+export const syncLaneExpirationMs = 250;
+export const transitionLaneExpirationMs = 5000;
 
 // Enable this flag to help with concurrent mode debugging.
 // It logs information to the console about React scheduling, rendering, and commit phases.
@@ -36,6 +42,8 @@ export const alwaysThrottleRetries = __VARIANT__;
 export const enableDebugTracing = __EXPERIMENTAL__;
 
 export const enableSchedulingProfiler = __VARIANT__;
+
+export const enableInfiniteRenderLoopDetection = __VARIANT__;
 
 // These are already tested in both modes using the build type dimension,
 // so we don't need to use __VARIANT__ to get extra coverage.

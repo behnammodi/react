@@ -50,9 +50,6 @@ const environmentFlags = {
   FIXME: false,
   TODO: false,
 
-  // Turn these flags back on (or delete) once the effect list is removed in
-  // favor of a depth-first traversal using `subtreeTags`.
-  dfsEffectsRefactor: true,
   enableUseJSStackToTrackPassiveDurations: false,
 };
 
@@ -82,9 +79,9 @@ function getTestFlags() {
       www,
 
       // This isn't a flag, just a useful alias for tests.
+      enableActivity: releaseChannel === 'experimental' || www,
       enableUseSyncExternalStoreShim: !__VARIANT__,
       enableSuspenseList: releaseChannel === 'experimental' || www,
-      enableOffscreen: releaseChannel === 'experimental' || www,
       enableLegacyHidden: www,
 
       // If there's a naming conflict between scheduler and React feature flags, the

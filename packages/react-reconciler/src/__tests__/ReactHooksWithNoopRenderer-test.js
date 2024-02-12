@@ -43,7 +43,6 @@ let assertLog;
 
 describe('ReactHooksWithNoopRenderer', () => {
   beforeEach(() => {
-    jest.resetModules();
     jest.useFakeTimers();
 
     React = require('react');
@@ -67,7 +66,7 @@ describe('ReactHooksWithNoopRenderer', () => {
     ContinuousEventPriority =
       require('react-reconciler/constants').ContinuousEventPriority;
     if (gate(flags => flags.enableSuspenseList)) {
-      SuspenseList = React.SuspenseList;
+      SuspenseList = React.unstable_SuspenseList;
     }
 
     const InternalTestUtils = require('internal-test-utils');
@@ -3584,9 +3583,7 @@ describe('ReactHooksWithNoopRenderer', () => {
       let _setText;
       function App() {
         const [text, setText] = useState('A');
-        const deferredText = useDeferredValue(text, {
-          timeoutMs: 500,
-        });
+        const deferredText = useDeferredValue(text);
         _setText = setText;
         return (
           <>

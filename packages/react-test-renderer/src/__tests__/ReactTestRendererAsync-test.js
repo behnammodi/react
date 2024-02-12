@@ -18,8 +18,6 @@ let waitFor;
 
 describe('ReactTestRendererAsync', () => {
   beforeEach(() => {
-    jest.resetModules();
-
     React = require('react');
     ReactTestRenderer = require('react-test-renderer');
     Scheduler = require('scheduler');
@@ -34,7 +32,7 @@ describe('ReactTestRendererAsync', () => {
       return props.children;
     }
     const renderer = ReactTestRenderer.create(<Foo>Hi</Foo>, {
-      unstable_isConcurrent: true,
+      isConcurrent: true,
     });
 
     // Before flushing, nothing has mounted.
@@ -68,7 +66,7 @@ describe('ReactTestRendererAsync', () => {
       );
     }
     const renderer = ReactTestRenderer.create(<Parent step={1} />, {
-      unstable_isConcurrent: true,
+      isConcurrent: true,
     });
 
     await waitForAll(['A:1', 'B:1', 'C:1']);
@@ -97,7 +95,7 @@ describe('ReactTestRendererAsync', () => {
     let renderer;
     React.startTransition(() => {
       renderer = ReactTestRenderer.create(<Parent step={1} />, {
-        unstable_isConcurrent: true,
+        isConcurrent: true,
       });
     });
 
@@ -137,7 +135,7 @@ describe('ReactTestRendererAsync', () => {
     let renderer;
     React.startTransition(() => {
       renderer = ReactTestRenderer.create(<Example step={1} />, {
-        unstable_isConcurrent: true,
+        isConcurrent: true,
       });
     });
 

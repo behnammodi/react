@@ -1452,6 +1452,15 @@ const tests = {
         }
       `,
     },
+    {
+      code: normalizeIndent`
+        function MyComponent() {
+          useEffect(() => {
+            console.log('banana banana banana');
+          }, undefined);
+        }
+      `,
+    },
   ],
   invalid: [
     {
@@ -7735,6 +7744,33 @@ const testsTypescript = {
             const baz = bar as typeof foo;
             console.log(baz);
           }, []);
+        }
+      `,
+    },
+    {
+      code: normalizeIndent`
+        function App(props) {
+          React.useEffect(() => {
+            console.log(props.test);
+          }, [props.test] as const);
+        }
+      `,
+    },
+    {
+      code: normalizeIndent`
+        function App(props) {
+          React.useEffect(() => {
+            console.log(props.test);
+          }, [props.test] as any);
+        }
+      `,
+    },
+    {
+      code: normalizeIndent`
+        function App(props) {
+          React.useEffect((() => {
+            console.log(props.test);
+          }) as any, [props.test]);
         }
       `,
     },

@@ -20,8 +20,6 @@ let waitForThrow;
 
 describe('ReactNewContext', () => {
   beforeEach(() => {
-    jest.resetModules();
-
     React = require('react');
     useContext = React.useContext;
     ReactNoop = require('react-noop-renderer');
@@ -1543,11 +1541,20 @@ describe('ReactNewContext', () => {
       }
 
       function Root(props) {
-        return contextKeys.reduceRight((children, key) => {
-          const Context = contexts.get(key);
-          const value = props.values[key];
-          return <Context.Provider value={value}>{children}</Context.Provider>;
-        }, <ConsumerTree rand={props.rand} depth={0} maxDepth={props.maxDepth} />);
+        return contextKeys.reduceRight(
+          (children, key) => {
+            const Context = contexts.get(key);
+            const value = props.values[key];
+            return (
+              <Context.Provider value={value}>{children}</Context.Provider>
+            );
+          },
+          <ConsumerTree
+            rand={props.rand}
+            depth={0}
+            maxDepth={props.maxDepth}
+          />,
+        );
       }
 
       const initialValues = contextKeys.reduce(

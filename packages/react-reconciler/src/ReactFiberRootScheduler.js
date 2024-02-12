@@ -10,6 +10,7 @@
 import type {FiberRoot} from './ReactInternalTypes';
 import type {Lane} from './ReactFiberLane';
 import type {PriorityLevel} from 'scheduler/src/SchedulerPriorities';
+import type {BatchConfigTransition} from './ReactFiberTracingMarkerComponent';
 
 import {enableDeferRootSchedulingToMicrotask} from 'shared/ReactFeatureFlags';
 import {
@@ -20,8 +21,7 @@ import {
   getNextLanes,
   includesSyncLane,
   markStarvedLanesAsExpired,
-  markRootEntangled,
-  mergeLanes,
+  upgradePendingLaneToSync,
   claimNextTransitionLane,
 } from './ReactFiberLane';
 import {
@@ -164,9 +164,6 @@ function flushSyncWorkAcrossRoots_impl(onlyLegacy: boolean) {
     return;
   }
 
-  const workInProgressRoot = getWorkInProgressRoot();
-  const workInProgressRootRenderLanes = getWorkInProgressRootRenderLanes();
-
   // There may or may not be synchronous work scheduled. Let's check.
   let didPerformSomeWork;
   let errors: Array<mixed> | null = null;
@@ -178,6 +175,9 @@ function flushSyncWorkAcrossRoots_impl(onlyLegacy: boolean) {
       if (onlyLegacy && root.tag !== LegacyRoot) {
         // Skip non-legacy roots.
       } else {
+        const workInProgressRoot = getWorkInProgressRoot();
+        const workInProgressRootRenderLanes =
+          getWorkInProgressRootRenderLanes();
         const nextLanes = getNextLanes(
           root,
           root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes,
@@ -185,10 +185,8 @@ function flushSyncWorkAcrossRoots_impl(onlyLegacy: boolean) {
         if (includesSyncLane(nextLanes)) {
           // This root has pending sync work. Flush it now.
           try {
-            // TODO: Pass nextLanes as an argument instead of computing it again
-            // inside performSyncWorkOnRoot.
             didPerformSomeWork = true;
-            performSyncWorkOnRoot(root);
+            performSyncWorkOnRoot(root, nextLanes);
           } catch (error) {
             // Collect errors so we can rethrow them at the end
             if (errors === null) {
@@ -252,7 +250,10 @@ function processRootScheduleInMicrotask() {
       currentEventTransitionLane !== NoLane &&
       shouldAttemptEagerTransition()
     ) {
-      markRootEntangled(root, mergeLanes(currentEventTransitionLane, SyncLane));
+      // A transition was scheduled during an event, but we're going to try to
+      // render it synchronously anyway. We do this during a popstate event to
+      // preserve the scroll position of the previous page.
+      upgradePendingLaneToSync(root, currentEventTransitionLane);
     }
 
     const nextLanes = scheduleTaskForRootDuringMicrotask(root, currentTime);
@@ -492,7 +493,12 @@ function scheduleImmediateTask(cb: () => mixed) {
   }
 }
 
-export function requestTransitionLane(): Lane {
+export function requestTransitionLane(
+  // This argument isn't used, it's only here to encourage the caller to
+  // check that it's inside a transition before calling this function.
+  // TODO: Make this non-nullable. Requires a tweak to useOptimistic.
+  transition: BatchConfigTransition | null,
+): Lane {
   // The algorithm for assigning an update to a lane should be stable for all
   // updates at the same priority within the same event. To do this, the
   // inputs to the algorithm must be the same.

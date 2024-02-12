@@ -34,8 +34,6 @@ describe('React hooks DevTools integration', () => {
       onCommitFiberUnmount: () => {},
     };
 
-    jest.resetModules();
-
     React = require('react');
     ReactDebugTools = require('react-debug-tools');
     ReactTestRenderer = require('react-test-renderer');
@@ -254,7 +252,7 @@ describe('React hooks DevTools integration', () => {
             <MyComponent />
           </React.Suspense>
         </div>,
-        {unstable_isConcurrent: true},
+        {isConcurrent: true},
       ),
     );
 
