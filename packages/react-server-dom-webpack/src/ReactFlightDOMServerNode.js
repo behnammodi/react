@@ -48,6 +48,12 @@ export {
   createClientModuleProxy,
 } from './ReactFlightWebpackReferences';
 
+import type {TemporaryReferenceSet} from 'react-server/src/ReactFlightServerTemporaryReferences';
+
+export {createTemporaryReferenceSet} from 'react-server/src/ReactFlightServerTemporaryReferences';
+
+export type {TemporaryReferenceSet};
+
 function createDrainHandler(destination: Destination, request: Request) {
   return () => startFlowing(request, destination);
 }
@@ -61,9 +67,11 @@ function createCancelHandler(request: Request, reason: string) {
 }
 
 type Options = {
+  environmentName?: string,
   onError?: (error: mixed) => void,
   onPostpone?: (reason: string) => void,
   identifierPrefix?: string,
+  temporaryReferences?: TemporaryReferenceSet,
 };
 
 type PipeableStream = {
@@ -82,6 +90,8 @@ function renderToPipeableStream(
     options ? options.onError : undefined,
     options ? options.identifierPrefix : undefined,
     options ? options.onPostpone : undefined,
+    options ? options.environmentName : undefined,
+    options ? options.temporaryReferences : undefined,
   );
   let hasStartedFlowing = false;
   startWork(request);
@@ -117,8 +127,13 @@ function renderToPipeableStream(
 function decodeReplyFromBusboy<T>(
   busboyStream: Busboy,
   webpackMap: ServerManifest,
+  options?: {temporaryReferences?: TemporaryReferenceSet},
 ): Thenable<T> {
-  const response = createResponse(webpackMap, '');
+  const response = createResponse(
+    webpackMap,
+    '',
+    options ? options.temporaryReferences : undefined,
+  );
   let pendingFiles = 0;
   const queuedFields: Array<string> = [];
   busboyStream.on('field', (name, value) => {
@@ -172,13 +187,19 @@ function decodeReplyFromBusboy<T>(
 function decodeReply<T>(
   body: string | FormData,
   webpackMap: ServerManifest,
+  options?: {temporaryReferences?: TemporaryReferenceSet},
 ): Thenable<T> {
   if (typeof body === 'string') {
     const form = new FormData();
     form.append('0', body);
     body = form;
   }
-  const response = createResponse(webpackMap, '', body);
+  const response = createResponse(
+    webpackMap,
+    '',
+    options ? options.temporaryReferences : undefined,
+    body,
+  );
   const root = getRoot<T>(response);
   close(response);
   return root;

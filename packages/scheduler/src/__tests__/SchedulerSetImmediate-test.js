@@ -32,6 +32,7 @@ let UserBlockingPriority;
 // assumes as little as possible about the order and timing of events.
 describe('SchedulerDOMSetImmediate', () => {
   beforeEach(() => {
+    jest.resetModules();
     runtime = installMockBrowserRuntime();
     jest.unmock('scheduler');
 
@@ -172,7 +173,7 @@ describe('SchedulerDOMSetImmediate', () => {
     runtime.assertLog([
       'setImmediate Callback',
       'Task',
-      'Yield at 5ms',
+      gate(flags => (flags.www ? 'Yield at 10ms' : 'Yield at 5ms')),
       'Set Immediate',
     ]);
 
@@ -287,7 +288,7 @@ describe('SchedulerDOMSetImmediate', () => {
   });
 });
 
-it('does not crash if setImmediate is undefined', () => {
+test('does not crash if setImmediate is undefined', () => {
   jest.resetModules();
   const originalSetImmediate = global.setImmediate;
   try {

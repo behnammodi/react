@@ -7,9 +7,12 @@
  * @flow
  */
 
-import type {Thenable} from 'shared/ReactTypes.js';
+import type {Thenable, ReactCustomFormAction} from 'shared/ReactTypes.js';
 
-import type {Response as FlightResponse} from 'react-client/src/ReactFlightClient';
+import type {
+  Response as FlightResponse,
+  FindSourceMapURLCallback,
+} from 'react-client/src/ReactFlightClient';
 
 import type {ReactServerValue} from 'react-client/src/ReactFlightReplyClient';
 
@@ -36,6 +39,12 @@ import {
   createServerReference as createServerReferenceImpl,
 } from 'react-client/src/ReactFlightReplyClient';
 
+import type {TemporaryReferenceSet} from 'react-client/src/ReactFlightTemporaryReferences';
+
+export {createTemporaryReferenceSet} from 'react-client/src/ReactFlightTemporaryReferences';
+
+export type {TemporaryReferenceSet};
+
 function noServerCall() {
   throw new Error(
     'Server Functions cannot be called during initial render. ' +
@@ -51,9 +60,17 @@ export function createServerReference<A: Iterable<any>, T>(
   return createServerReferenceImpl(id, noServerCall);
 }
 
+type EncodeFormActionCallback = <A>(
+  id: any,
+  args: Promise<A>,
+) => ReactCustomFormAction;
+
 export type Options = {
   ssrManifest: SSRManifest,
   nonce?: string,
+  encodeFormAction?: EncodeFormActionCallback,
+  temporaryReferences?: TemporaryReferenceSet,
+  findSourceMapURL?: FindSourceMapURLCallback,
 };
 
 function createResponseFromOptions(options: Options) {
@@ -61,7 +78,14 @@ function createResponseFromOptions(options: Options) {
     options.ssrManifest.moduleMap,
     options.ssrManifest.moduleLoading,
     noServerCall,
+    options.encodeFormAction,
     typeof options.nonce === 'string' ? options.nonce : undefined,
+    options && options.temporaryReferences
+      ? options.temporaryReferences
+      : undefined,
+    __DEV__ && options && options.findSourceMapURL
+      ? options.findSourceMapURL
+      : undefined,
   );
 }
 
@@ -119,11 +143,20 @@ function createFromFetch<T>(
 
 function encodeReply(
   value: ReactServerValue,
+  options?: {temporaryReferences?: TemporaryReferenceSet},
 ): Promise<
   string | URLSearchParams | FormData,
 > /* We don't use URLSearchParams yet but maybe */ {
   return new Promise((resolve, reject) => {
-    processReply(value, '', resolve, reject);
+    processReply(
+      value,
+      '',
+      options && options.temporaryReferences
+        ? options.temporaryReferences
+        : undefined,
+      resolve,
+      reject,
+    );
   });
 }
 

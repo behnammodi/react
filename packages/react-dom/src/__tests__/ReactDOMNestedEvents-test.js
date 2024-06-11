@@ -18,6 +18,7 @@ describe('ReactDOMNestedEvents', () => {
   let assertLog;
 
   beforeEach(() => {
+    jest.resetModules();
     React = require('react');
     ReactDOMClient = require('react-dom/client');
     Scheduler = require('scheduler');
@@ -28,7 +29,7 @@ describe('ReactDOMNestedEvents', () => {
     assertLog = InternalTestUtils.assertLog;
   });
 
-  test('nested event dispatches should not cause updates to flush', async () => {
+  it('nested event dispatches should not cause updates to flush', async () => {
     const buttonRef = React.createRef(null);
     function App() {
       const [isClicked, setIsClicked] = useState(false);

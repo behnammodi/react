@@ -22,6 +22,7 @@ let assertLog;
 
 describe('ReactEffectOrdering', () => {
   beforeEach(() => {
+    jest.resetModules();
     jest.useFakeTimers();
 
     React = require('react');
@@ -35,7 +36,7 @@ describe('ReactEffectOrdering', () => {
     assertLog = InternalTestUtils.assertLog;
   });
 
-  test('layout unmounts on deletion are fired in parent -> child order', async () => {
+  it('layout unmounts on deletion are fired in parent -> child order', async () => {
     const root = ReactNoop.createRoot();
 
     function Parent() {
@@ -62,7 +63,7 @@ describe('ReactEffectOrdering', () => {
     assertLog(['Unmount parent', 'Unmount child']);
   });
 
-  test('passive unmounts on deletion are fired in parent -> child order', async () => {
+  it('passive unmounts on deletion are fired in parent -> child order', async () => {
     const root = ReactNoop.createRoot();
 
     function Parent() {

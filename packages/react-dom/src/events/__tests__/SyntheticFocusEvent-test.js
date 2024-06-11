@@ -14,6 +14,7 @@ describe('SyntheticFocusEvent', () => {
   let container;
 
   beforeEach(() => {
+    jest.resetModules();
     React = require('react');
     ReactDOMClient = require('react-dom/client');
     act = require('internal-test-utils').act;
@@ -27,7 +28,7 @@ describe('SyntheticFocusEvent', () => {
     container = null;
   });
 
-  test('onFocus events have the focus type', async () => {
+  it('onFocus events have the focus type', async () => {
     const log = [];
     const root = ReactDOMClient.createRoot(container);
     await act(() => {
@@ -53,7 +54,7 @@ describe('SyntheticFocusEvent', () => {
     expect(log).toEqual(['onFocusCapture: focus', 'onFocus: focus']);
   });
 
-  test('onBlur events have the blur type', async () => {
+  it('onBlur events have the blur type', async () => {
     const log = [];
     const root = ReactDOMClient.createRoot(container);
     await act(() => {

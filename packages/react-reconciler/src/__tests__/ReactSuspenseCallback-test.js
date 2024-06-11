@@ -16,6 +16,8 @@ let act;
 
 describe('ReactSuspense', () => {
   beforeEach(() => {
+    jest.resetModules();
+
     React = require('react');
     ReactNoop = require('react-noop-renderer');
 
@@ -56,7 +58,7 @@ describe('ReactSuspense', () => {
 
     ReactNoop.render(elementBadType);
     await expect(async () => await waitForAll([])).toErrorDev([
-      'Warning: Unexpected type for suspenseCallback.',
+      'Unexpected type for suspenseCallback.',
     ]);
 
     const elementMissingCallback = (

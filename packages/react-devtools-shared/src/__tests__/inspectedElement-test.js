@@ -77,7 +77,7 @@ describe('InspectedElement', () => {
     // Used by inspectElementAtIndex() helper function
     utils.act(() => {
       testRendererInstance = TestRenderer.create(null, {
-        isConcurrent: true,
+        unstable_isConcurrent: true,
       });
     });
 
@@ -181,7 +181,8 @@ describe('InspectedElement', () => {
 
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // @reactVersion <= 18.2
-  xit('should inspect the currently selected element (legacy render)', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should inspect the currently selected element (legacy render)', async () => {
     const Example = () => {
       const [count] = React.useState(1);
       return count;
@@ -198,6 +199,7 @@ describe('InspectedElement', () => {
         "events": undefined,
         "hooks": [
           {
+            "debugInfo": null,
             "hookSource": {
               "columnNumber": "removed by Jest serializer",
               "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -240,6 +242,7 @@ describe('InspectedElement', () => {
         "events": undefined,
         "hooks": [
           {
+            "debugInfo": null,
             "hookSource": {
               "columnNumber": "removed by Jest serializer",
               "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -354,7 +357,7 @@ describe('InspectedElement', () => {
         ['An update to %s inside a test was not wrapped in act'],
         () => {
           testRendererInstance = TestRenderer.create(null, {
-            isConcurrent: true,
+            unstable_isConcurrent: true,
           });
         },
       );
@@ -422,7 +425,9 @@ describe('InspectedElement', () => {
     targetRenderCount = 0;
 
     let inspectedElement = await inspectElementAtIndex(1);
-    expect(targetRenderCount).toBe(1);
+    // One more because we call render function for generating component stack,
+    // which is required for defining source location
+    expect(targetRenderCount).toBe(2);
     expect(inspectedElement.props).toMatchInlineSnapshot(`
       {
         "a": 1,
@@ -483,7 +488,9 @@ describe('InspectedElement', () => {
     targetRenderCount = 0;
 
     let inspectedElement = await inspectElementAtIndex(1);
-    expect(targetRenderCount).toBe(1);
+    // One more because we call render function for generating component stack,
+    // which is required for defining source location
+    expect(targetRenderCount).toBe(2);
     expect(inspectedElement.props).toMatchInlineSnapshot(`
       {
         "a": 1,
@@ -504,7 +511,7 @@ describe('InspectedElement', () => {
       ['An update to %s inside a test was not wrapped in act'],
       () => {
         testRendererInstance = TestRenderer.create(null, {
-          isConcurrent: true,
+          unstable_isConcurrent: true,
         });
       },
     );
@@ -553,7 +560,9 @@ describe('InspectedElement', () => {
     const inspectedElement = await inspectElementAtIndex(0);
 
     expect(inspectedElement).not.toBe(null);
-    expect(targetRenderCount).toBe(2);
+    // One more because we call render function for generating component stack,
+    // which is required for defining source location
+    expect(targetRenderCount).toBe(3);
     expect(console.error).toHaveBeenCalledTimes(1);
     expect(console.info).toHaveBeenCalledTimes(1);
     expect(console.log).toHaveBeenCalledTimes(1);
@@ -1157,6 +1166,7 @@ describe('InspectedElement', () => {
     expect(inspectedElement.hooks).toMatchInlineSnapshot(`
       [
         {
+          "debugInfo": null,
           "hookSource": {
             "columnNumber": "removed by Jest serializer",
             "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -1184,6 +1194,7 @@ describe('InspectedElement', () => {
     expect(inspectedElement.hooks).toMatchInlineSnapshot(`
       [
         {
+          "debugInfo": null,
           "hookSource": {
             "columnNumber": "removed by Jest serializer",
             "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -1643,7 +1654,8 @@ describe('InspectedElement', () => {
 
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // @reactVersion <= 18.2
-  xit('should inspect hooks for components that only use context (legacy render)', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should inspect hooks for components that only use context (legacy render)', async () => {
     const Context = React.createContext(true);
     const Example = () => {
       const value = React.useContext(Context);
@@ -1659,6 +1671,7 @@ describe('InspectedElement', () => {
         "events": undefined,
         "hooks": [
           {
+            "debugInfo": null,
             "hookSource": {
               "columnNumber": "removed by Jest serializer",
               "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -1700,6 +1713,7 @@ describe('InspectedElement', () => {
         "events": undefined,
         "hooks": [
           {
+            "debugInfo": null,
             "hookSource": {
               "columnNumber": "removed by Jest serializer",
               "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -1945,6 +1959,7 @@ describe('InspectedElement', () => {
     expect(hooks).toMatchInlineSnapshot(`
       [
         {
+          "debugInfo": null,
           "hookSource": {
             "columnNumber": "removed by Jest serializer",
             "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -1956,6 +1971,7 @@ describe('InspectedElement', () => {
           "name": "DebuggableHook",
           "subHooks": [
             {
+              "debugInfo": null,
               "hookSource": {
                 "columnNumber": "removed by Jest serializer",
                 "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -2017,7 +2033,8 @@ describe('InspectedElement', () => {
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // Regression test for github.com/facebook/react/issues/22099
   // @reactVersion <= 18.2
-  xit('should not error when an unchanged component is re-inspected after component filters changed (legacy render)', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should not error when an unchanged component is re-inspected after component filters changed (legacy render)', async () => {
     const Example = () => <div />;
 
     await utils.actAsync(() => legacyRender(<Example />));
@@ -2055,7 +2072,7 @@ describe('InspectedElement', () => {
       ['An update to %s inside a test was not wrapped in act'],
       () => {
         testRendererInstance = TestRenderer.create(null, {
-          isConcurrent: true,
+          unstable_isConcurrent: true,
         });
       },
     );
@@ -2115,7 +2132,7 @@ describe('InspectedElement', () => {
       ['An update to %s inside a test was not wrapped in act'],
       () => {
         testRendererInstance = TestRenderer.create(null, {
-          isConcurrent: true,
+          unstable_isConcurrent: true,
         });
       },
     );
@@ -2138,14 +2155,15 @@ describe('InspectedElement', () => {
 
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // @reactVersion <= 18.2
-  xit('should display the root type for ReactDOM.hydrate', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should display the root type for ReactDOM.hydrate', async () => {
     const Example = () => <div />;
 
     await utils.actAsync(() => {
       const container = document.createElement('div');
       container.innerHTML = '<div></div>';
       withErrorsOrWarningsIgnored(
-        ['ReactDOM.hydrate is no longer supported in React 18'],
+        ['ReactDOM.hydrate has not been supported since React 18'],
         () => {
           ReactDOM.hydrate(<Example />, container);
         },
@@ -2158,7 +2176,8 @@ describe('InspectedElement', () => {
 
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // @reactVersion <= 18.2
-  xit('should display the root type for ReactDOM.render', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should display the root type for ReactDOM.render', async () => {
     const Example = () => <div />;
 
     await utils.actAsync(() => {
@@ -2239,6 +2258,7 @@ describe('InspectedElement', () => {
         {
           "hooks": [
             {
+              "debugInfo": null,
               "hookSource": {
                 "columnNumber": "removed by Jest serializer",
                 "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -2275,6 +2295,7 @@ describe('InspectedElement', () => {
         {
           "hooks": [
             {
+              "debugInfo": null,
               "hookSource": {
                 "columnNumber": "removed by Jest serializer",
                 "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -2311,6 +2332,7 @@ describe('InspectedElement', () => {
         {
           "hooks": [
             {
+              "debugInfo": null,
               "hookSource": {
                 "columnNumber": "removed by Jest serializer",
                 "fileName": "react-devtools-shared/src/__tests__/inspectedElement-test.js",
@@ -2388,7 +2410,7 @@ describe('InspectedElement', () => {
               <Suspender target={id} />
             </React.Suspense>
           </Contexts>,
-          {isConcurrent: true},
+          {unstable_isConcurrent: true},
         );
       }, false);
       await utils.actAsync(() => {
@@ -2534,7 +2556,7 @@ describe('InspectedElement', () => {
       };
 
       await withErrorsOrWarningsIgnored(
-        ['Warning: Each child in a list should have a unique "key" prop.'],
+        ['Each child in a list should have a unique "key" prop.'],
         async () => {
           await utils.actAsync(() =>
             render(<Example repeatWarningCount={1} />),
@@ -2545,13 +2567,7 @@ describe('InspectedElement', () => {
       const data = await getErrorsAndWarningsForElementAtIndex(0);
       expect(data).toMatchInlineSnapshot(`
         {
-          "errors": [
-            [
-              "Warning: Each child in a list should have a unique "key" prop. See https://reactjs.org/link/warning-keys for more information.
-            at Example",
-              1,
-            ],
-          ],
+          "errors": [],
           "warnings": [],
         }
       `);
@@ -2778,7 +2794,8 @@ describe('InspectedElement', () => {
 
   // TODO(hoxyq): Enable this test for versions ~18, currently broken
   // @reactVersion <= 18.2
-  xit('inspecting nested renderers should not throw (legacy render)', async () => {
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('inspecting nested renderers should not throw (legacy render)', async () => {
     // Ignoring react art warnings
     jest.spyOn(console, 'error').mockImplementation(() => {});
     const ReactArt = require('react-art');
@@ -2926,7 +2943,7 @@ describe('InspectedElement', () => {
           ['An update to %s inside a test was not wrapped in act'],
           () => {
             testRendererInstance = TestRenderer.create(null, {
-              isConcurrent: true,
+              unstable_isConcurrent: true,
             });
           },
         );

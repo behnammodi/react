@@ -22,6 +22,8 @@ describe('ReactDOMTextarea', () => {
   const ReactFeatureFlags = require('shared/ReactFeatureFlags');
 
   beforeEach(() => {
+    jest.resetModules();
+
     React = require('react');
     ReactDOMClient = require('react-dom/client');
     ReactDOMServer = require('react-dom/server');
@@ -71,6 +73,18 @@ describe('ReactDOMTextarea', () => {
     const root = ReactDOMClient.createRoot(container);
     const node = await renderTextarea(
       <textarea defaultValue={0} />,
+      container,
+      root,
+    );
+
+    expect(node.value).toBe('0');
+  });
+
+  it('should display `defaultValue` of bigint 0', async () => {
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+    const node = await renderTextarea(
+      <textarea defaultValue={0n} />,
       container,
       root,
     );
@@ -727,7 +741,7 @@ describe('ReactDOMTextarea', () => {
         '(specify either the value prop, or the defaultValue prop, but not ' +
         'both). Decide between using a controlled or uncontrolled textarea ' +
         'and remove one of these props. More info: ' +
-        'https://reactjs.org/link/controlled-components',
+        'https://react.dev/link/controlled-components',
     );
 
     container = document.createElement('div');
@@ -996,16 +1010,6 @@ describe('ReactDOMTextarea', () => {
     expect(node.defaultValue).toBe('');
   });
 
-  it('should not warn about missing onChange if value is not set', async () => {
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<textarea />);
-      }),
-    ).resolves.not.toThrow();
-  });
-
   it('should not warn about missing onChange if value is undefined', async () => {
     const container = document.createElement('div');
     const root = ReactDOMClient.createRoot(container);
@@ -1055,7 +1059,7 @@ describe('ReactDOMTextarea', () => {
         root.render(<textarea value={false} />);
       });
     }).toErrorDev(
-      'Warning: You provided a `value` prop to a form ' +
+      'You provided a `value` prop to a form ' +
         'field without an `onChange` handler. This will render a read-only ' +
         'field. If the field should be mutable use `defaultValue`. ' +
         'Otherwise, set either `onChange` or `readOnly`.',
@@ -1070,7 +1074,7 @@ describe('ReactDOMTextarea', () => {
         root.render(<textarea value={0} />);
       });
     }).toErrorDev(
-      'Warning: You provided a `value` prop to a form ' +
+      'You provided a `value` prop to a form ' +
         'field without an `onChange` handler. This will render a read-only ' +
         'field. If the field should be mutable use `defaultValue`. ' +
         'Otherwise, set either `onChange` or `readOnly`.',
@@ -1085,7 +1089,7 @@ describe('ReactDOMTextarea', () => {
         root.render(<textarea value="0" />);
       });
     }).toErrorDev(
-      'Warning: You provided a `value` prop to a form ' +
+      'You provided a `value` prop to a form ' +
         'field without an `onChange` handler. This will render a read-only ' +
         'field. If the field should be mutable use `defaultValue`. ' +
         'Otherwise, set either `onChange` or `readOnly`.',
@@ -1100,7 +1104,7 @@ describe('ReactDOMTextarea', () => {
         root.render(<textarea value="" />);
       });
     }).toErrorDev(
-      'Warning: You provided a `value` prop to a form ' +
+      'You provided a `value` prop to a form ' +
         'field without an `onChange` handler. This will render a read-only ' +
         'field. If the field should be mutable use `defaultValue`. ' +
         'Otherwise, set either `onChange` or `readOnly`.',

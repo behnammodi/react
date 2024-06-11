@@ -18,6 +18,7 @@ describe('ReactDOMEventListener', () => {
   let simulateEventDispatch;
 
   beforeEach(() => {
+    jest.resetModules();
     React = require('react');
     ReactDOM = require('react-dom');
     ReactDOMClient = require('react-dom/client');
@@ -113,10 +114,18 @@ describe('ReactDOMEventListener', () => {
             this.setState({clicked: true});
           };
           componentDidMount() {
-            expect(ReactDOM.findDOMNode(this)).toBe(container.firstChild);
+            expect(
+              ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.findDOMNode(
+                this,
+              ),
+            ).toBe(container.firstChild);
           }
           componentDidUpdate() {
-            expect(ReactDOM.findDOMNode(this)).toBe(container.firstChild);
+            expect(
+              ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.findDOMNode(
+                this,
+              ),
+            ).toBe(container.firstChild);
           }
           render() {
             if (this.state.clicked) {
