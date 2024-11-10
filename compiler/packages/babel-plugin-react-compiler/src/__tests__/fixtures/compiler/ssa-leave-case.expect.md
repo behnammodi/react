@@ -2,6 +2,8 @@
 ## Input
 
 ```javascript
+import {Stringify} from 'shared-runtime';
+
 function Component(props) {
   let x = [];
   let y;
@@ -10,12 +12,23 @@ function Component(props) {
     y = x;
   }
   return (
-    <Component>
+    <Stringify>
       {x}
       {y}
-    </Component>
+    </Stringify>
   );
 }
+
+export const FIXTURE_ENTRYPOINT = {
+  fn: Component,
+  params: [{p0: false, p1: 2}],
+  sequentialRenders: [
+    {p0: false, p1: 2},
+    {p0: false, p1: 2},
+    {p0: true, p1: 2},
+    {p0: true, p1: 3},
+  ],
+};
 
 ```
 
@@ -23,39 +36,49 @@ function Component(props) {
 
 ```javascript
 import { c as _c } from "react/compiler-runtime";
+import { Stringify } from "shared-runtime";
+
 function Component(props) {
-  const $ = _c(6);
-  let x;
-  let y;
-  if ($[0] !== props) {
-    x = [];
+  const $ = _c(3);
+  let t0;
+  if ($[0] !== props.p0 || $[1] !== props.p1) {
+    const x = [];
+    let y;
     if (props.p0) {
       x.push(props.p1);
       y = x;
     }
-    $[0] = props;
-    $[1] = x;
-    $[2] = y;
-  } else {
-    x = $[1];
-    y = $[2];
-  }
-  let t0;
-  if ($[3] !== x || $[4] !== y) {
+
     t0 = (
-      <Component>
+      <Stringify>
         {x}
         {y}
-      </Component>
+      </Stringify>
     );
-    $[3] = x;
-    $[4] = y;
-    $[5] = t0;
+    $[0] = props.p0;
+    $[1] = props.p1;
+    $[2] = t0;
   } else {
-    t0 = $[5];
+    t0 = $[2];
   }
   return t0;
 }
 
+export const FIXTURE_ENTRYPOINT = {
+  fn: Component,
+  params: [{ p0: false, p1: 2 }],
+  sequentialRenders: [
+    { p0: false, p1: 2 },
+    { p0: false, p1: 2 },
+    { p0: true, p1: 2 },
+    { p0: true, p1: 3 },
+  ],
+};
+
 ```
       
+### Eval output
+(kind: ok) <div>{"children":[[],null]}</div>
+<div>{"children":[[],null]}</div>
+<div>{"children":[[2],"[[ cyclic ref *2 ]]"]}</div>
+<div>{"children":[[3],"[[ cyclic ref *2 ]]"]}</div>

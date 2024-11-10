@@ -36,65 +36,49 @@ function mayMutate() {}
 ```javascript
 import { c as _c } from "react/compiler-runtime";
 function ComponentA(props) {
-  const $ = _c(6);
-  let a;
-  let b;
-  if ($[0] !== props) {
-    a = [];
-    b = [];
+  const $ = _c(4);
+  let t0;
+  if ($[0] !== props.p0 || $[1] !== props.p1 || $[2] !== props.p2) {
+    const a = [];
+    const b = [];
     if (b) {
       a.push(props.p0);
     }
     if (props.p1) {
       b.push(props.p2);
     }
-    $[0] = props;
-    $[1] = a;
-    $[2] = b;
-  } else {
-    a = $[1];
-    b = $[2];
-  }
-  let t0;
-  if ($[3] !== a || $[4] !== b) {
+
     t0 = <Foo a={a} b={b} />;
-    $[3] = a;
-    $[4] = b;
-    $[5] = t0;
+    $[0] = props.p0;
+    $[1] = props.p1;
+    $[2] = props.p2;
+    $[3] = t0;
   } else {
-    t0 = $[5];
+    t0 = $[3];
   }
   return t0;
 }
 
 function ComponentB(props) {
-  const $ = _c(6);
-  let a;
-  let b;
-  if ($[0] !== props) {
-    a = [];
-    b = [];
+  const $ = _c(4);
+  let t0;
+  if ($[0] !== props.p0 || $[1] !== props.p1 || $[2] !== props.p2) {
+    const a = [];
+    const b = [];
     if (mayMutate(b)) {
       a.push(props.p0);
     }
     if (props.p1) {
       b.push(props.p2);
     }
-    $[0] = props;
-    $[1] = a;
-    $[2] = b;
-  } else {
-    a = $[1];
-    b = $[2];
-  }
-  let t0;
-  if ($[3] !== a || $[4] !== b) {
+
     t0 = <Foo a={a} b={b} />;
-    $[3] = a;
-    $[4] = b;
-    $[5] = t0;
+    $[0] = props.p0;
+    $[1] = props.p1;
+    $[2] = props.p2;
+    $[3] = t0;
   } else {
-    t0 = $[5];
+    t0 = $[3];
   }
   return t0;
 }

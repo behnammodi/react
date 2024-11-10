@@ -16,26 +16,39 @@ import {ReactVersion} from '../../../../ReactVersions';
 
 const ReactVersionTestingAgainst = process.env.REACT_VERSION || ReactVersion;
 
+let React = require('react');
+let ReactDOM;
+let ReactDOMClient;
+let Scheduler;
+let utils;
+let assertLog;
+let waitFor;
+
+// This flag is on experimental which disables timeline profiler.
+const enableComponentPerformanceTrack =
+  React.version.startsWith('19') && React.version.includes('experimental');
+
 describe('Timeline profiler', () => {
-  let React;
-  let ReactDOM;
-  let ReactDOMClient;
-  let Scheduler;
-  let utils;
-  let assertLog;
-  let waitFor;
+  if (enableComponentPerformanceTrack) {
+    test('no tests', () => {});
+    // Ignore all tests.
+    return;
+  }
 
   describe('User Timing API', () => {
-    let clearedMarks;
+    if (enableComponentPerformanceTrack) {
+      return;
+    }
+    let currentlyNotClearedMarks;
+    let registeredMarks;
     let featureDetectionMarkName = null;
-    let marks;
     let setPerformanceMock;
 
     function createUserTimingPolyfill() {
       featureDetectionMarkName = null;
 
-      clearedMarks = [];
-      marks = [];
+      currentlyNotClearedMarks = [];
+      registeredMarks = [];
 
       // Remove file-system specific bits or version-specific bits of information from the module range marks.
       function filterMarkData(markName) {
@@ -56,8 +69,9 @@ describe('Timeline profiler', () => {
         clearMarks(markName) {
           markName = filterMarkData(markName);
 
-          clearedMarks.push(markName);
-          marks = marks.filter(mark => mark !== markName);
+          currentlyNotClearedMarks = currentlyNotClearedMarks.filter(
+            mark => mark !== markName,
+          );
         },
         mark(markName, markOptions) {
           markName = filterMarkData(markName);
@@ -66,7 +80,8 @@ describe('Timeline profiler', () => {
             featureDetectionMarkName = markName;
           }
 
-          marks.push(markName);
+          registeredMarks.push(markName);
+          currentlyNotClearedMarks.push(markName);
 
           if (markOptions != null) {
             // This is triggers the feature detection.
@@ -76,8 +91,8 @@ describe('Timeline profiler', () => {
       };
     }
 
-    function clearPendingMarks() {
-      clearedMarks.splice(0);
+    function eraseRegisteredMarks() {
+      registeredMarks.splice(0);
     }
 
     beforeEach(() => {
@@ -114,8 +129,9 @@ describe('Timeline profiler', () => {
 
     afterEach(() => {
       // Verify all logged marks also get cleared.
-      expect(marks).toHaveLength(0);
+      expect(currentlyNotClearedMarks).toHaveLength(0);
 
+      eraseRegisteredMarks();
       setPerformanceMock(null);
     });
 
@@ -635,7 +651,7 @@ describe('Timeline profiler', () => {
 
         const data = await preprocessData([
           ...createBoilerplateEntries(),
-          ...createUserTimingData(clearedMarks),
+          ...createUserTimingData(registeredMarks),
         ]);
         expect(data).toMatchInlineSnapshot(`
           {
@@ -832,7 +848,7 @@ describe('Timeline profiler', () => {
 
         const data = await preprocessData([
           ...createBoilerplateEntries(),
-          ...createUserTimingData(clearedMarks),
+          ...createUserTimingData(registeredMarks),
         ]);
         expect(data).toMatchInlineSnapshot(`
           {
@@ -1152,7 +1168,7 @@ describe('Timeline profiler', () => {
       it('should error if events and measures are incomplete', async () => {
         legacyRender(<div />);
 
-        const invalidMarks = clearedMarks.filter(
+        const invalidMarks = registeredMarks.filter(
           mark => !mark.includes('render-stop'),
         );
         const invalidUserTimingData = createUserTimingData(invalidMarks);
@@ -1170,7 +1186,7 @@ describe('Timeline profiler', () => {
       it('should error if work is completed without being started', async () => {
         legacyRender(<div />);
 
-        const invalidMarks = clearedMarks.filter(
+        const invalidMarks = registeredMarks.filter(
           mark => !mark.includes('render-start'),
         );
         const invalidUserTimingData = createUserTimingData(invalidMarks);
@@ -1265,7 +1281,7 @@ describe('Timeline profiler', () => {
           ),
         );
 
-        testMarks.push(...createUserTimingData(clearedMarks));
+        testMarks.push(...createUserTimingData(registeredMarks));
 
         let data;
         await utils.actAsync(async () => {
@@ -1290,11 +1306,10 @@ describe('Timeline profiler', () => {
               createNativeEventEntry('click', 5),
             ];
 
-            clearPendingMarks();
-
+            eraseRegisteredMarks();
             legacyRender(<App />);
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             const data = await preprocessData(testMarks);
             const event = data.nativeEvents.find(({type}) => type === 'click');
@@ -1316,11 +1331,10 @@ describe('Timeline profiler', () => {
 
             startTime += 2000;
 
-            clearPendingMarks();
-
+            eraseRegisteredMarks();
             legacyRender(<App />);
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             const data = await preprocessData(testMarks);
             const event = data.nativeEvents.find(({type}) => type === 'click');
@@ -1340,11 +1354,10 @@ describe('Timeline profiler', () => {
               createNativeEventEntry('click', 25000),
             ];
 
-            clearPendingMarks();
-
+            eraseRegisteredMarks();
             legacyRender(<App />);
 
-            clearedMarks.forEach(markName => {
+            registeredMarks.forEach(markName => {
               if (markName === '--render-stop') {
                 // Fake a long running render
                 startTime += 20000;
@@ -1401,8 +1414,8 @@ describe('Timeline profiler', () => {
 
             await waitFor(['A:1']);
 
-            testMarks.push(...createUserTimingData(clearedMarks));
-            clearPendingMarks();
+            testMarks.push(...createUserTimingData(registeredMarks));
+            eraseRegisteredMarks();
 
             // Advance the clock some more to make the pending React update seem long.
             startTime += 20000;
@@ -1421,7 +1434,7 @@ describe('Timeline profiler', () => {
 
             assertLog(['A:2', 'B:2']);
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             const data = await preprocessData(testMarks);
             const event = data.nativeEvents.find(({type}) => type === 'click');
@@ -1452,7 +1465,7 @@ describe('Timeline profiler', () => {
 
             const data = await preprocessData([
               ...createBoilerplateEntries(),
-              ...createUserTimingData(clearedMarks),
+              ...createUserTimingData(registeredMarks),
             ]);
 
             const event = data.schedulingEvents.find(
@@ -1488,7 +1501,7 @@ describe('Timeline profiler', () => {
 
             const data = await preprocessData([
               ...createBoilerplateEntries(),
-              ...createUserTimingData(clearedMarks),
+              ...createUserTimingData(registeredMarks),
             ]);
 
             const event = data.schedulingEvents.find(
@@ -1524,7 +1537,7 @@ describe('Timeline profiler', () => {
             assertLog(['Component mount', 'Component update']);
 
             const testMarks = [];
-            clearedMarks.forEach(markName => {
+            registeredMarks.forEach(markName => {
               if (markName === '--component-render-start-Component') {
                 // Fake a long running render
                 startTime += 20000;
@@ -1585,7 +1598,7 @@ describe('Timeline profiler', () => {
             assertLog(['Component mount', 'Component update']);
 
             const testMarks = [];
-            clearedMarks.forEach(markName => {
+            registeredMarks.forEach(markName => {
               if (markName === '--component-render-start-Component') {
                 // Fake a long running render
                 startTime += 20000;
@@ -1657,7 +1670,7 @@ describe('Timeline profiler', () => {
             ]);
 
             const testMarks = [];
-            clearedMarks.forEach(markName => {
+            registeredMarks.forEach(markName => {
               if (markName === '--component-render-start-Component') {
                 // Fake a long running render
                 startTime += 20000;
@@ -1727,7 +1740,7 @@ describe('Timeline profiler', () => {
             ]);
 
             const testMarks = [];
-            clearedMarks.forEach(markName => {
+            registeredMarks.forEach(markName => {
               if (markName === '--component-render-start-Component') {
                 // Fake a long running render
                 startTime += 20000;
@@ -1792,7 +1805,7 @@ describe('Timeline profiler', () => {
               ),
             );
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             const data = await preprocessData(testMarks);
             expect(data.thrownErrors).toHaveLength(2);
@@ -1851,7 +1864,7 @@ describe('Timeline profiler', () => {
               ),
             );
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             let data;
             await utils.actAsync(async () => {
@@ -1911,7 +1924,7 @@ describe('Timeline profiler', () => {
               ),
             );
 
-            testMarks.push(...createUserTimingData(clearedMarks));
+            testMarks.push(...createUserTimingData(registeredMarks));
 
             let data;
             await utils.actAsync(async () => {

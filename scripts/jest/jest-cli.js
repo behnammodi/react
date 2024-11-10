@@ -308,9 +308,8 @@ function getCommandArgs() {
     args.push('--useStderr');
   }
 
-  // CI Environments have limited workers.
-  if (argv.ci) {
-    args.push('--maxWorkers=2');
+  if (argv.ci === true) {
+    args.push('--maxConcurrency=10');
   }
 
   // Push the remaining args onto the command.
@@ -364,16 +363,18 @@ function main() {
   const envars = getEnvars();
   const env = Object.entries(envars).map(([k, v]) => `${k}=${v}`);
 
-  // Print the full command we're actually running.
-  const command = `$ ${env.join(' ')} node ${args.join(' ')}`;
-  console.log(chalk.dim(command));
+  if (argv.ci !== true) {
+    // Print the full command we're actually running.
+    const command = `$ ${env.join(' ')} node ${args.join(' ')}`;
+    console.log(chalk.dim(command));
 
-  // Print the release channel and project we're running for quick confirmation.
-  console.log(
-    chalk.blue(
-      `\nRunning tests for ${argv.project} (${argv.releaseChannel})...`
-    )
-  );
+    // Print the release channel and project we're running for quick confirmation.
+    console.log(
+      chalk.blue(
+        `\nRunning tests for ${argv.project} (${argv.releaseChannel})...`
+      )
+    );
+  }
 
   // Print a message that the debugger is starting just
   // for some extra feedback when running the debugger.

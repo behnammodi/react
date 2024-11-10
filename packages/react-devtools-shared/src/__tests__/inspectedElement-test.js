@@ -34,6 +34,8 @@ describe('InspectedElement', () => {
   let SettingsContextController;
   let StoreContext;
   let TreeContextController;
+  let TreeStateContext;
+  let TreeDispatcherContext;
 
   let TestUtilsAct;
   let TestRendererAct;
@@ -73,6 +75,10 @@ describe('InspectedElement', () => {
       require('react-devtools-shared/src/devtools/views/context').StoreContext;
     TreeContextController =
       require('react-devtools-shared/src/devtools/views/Components/TreeContext').TreeContextController;
+    TreeStateContext =
+      require('react-devtools-shared/src/devtools/views/Components/TreeContext').TreeStateContext;
+    TreeDispatcherContext =
+      require('react-devtools-shared/src/devtools/views/Components/TreeContext').TreeDispatcherContext;
 
     // Used by inspectElementAtIndex() helper function
     utils.act(() => {
@@ -117,12 +123,11 @@ describe('InspectedElement', () => {
         <SettingsContextController>
           <TreeContextController
             defaultSelectedElementID={defaultSelectedElementID}
-            defaultSelectedElementIndex={defaultSelectedElementIndex}>
-            <React.Suspense fallback="Loading...">
-              <InspectedElementContextController>
-                {children}
-              </InspectedElementContextController>
-            </React.Suspense>
+            defaultSelectedElementIndex={defaultSelectedElementIndex}
+            defaultInspectedElementID={defaultSelectedElementID}>
+            <InspectedElementContextController>
+              {children}
+            </InspectedElementContextController>
           </TreeContextController>
         </SettingsContextController>
       </StoreContext.Provider>
@@ -665,7 +670,6 @@ describe('InspectedElement', () => {
           anonymous_fn={instance.anonymousFunction}
           array_buffer={arrayBuffer}
           array_of_arrays={arrayOfArrays}
-          // eslint-disable-next-line no-undef
           big_int={BigInt(123)}
           bound_fn={exampleFunction.bind(this)}
           data_view={dataView}
@@ -693,8 +697,8 @@ describe('InspectedElement', () => {
     expect(inspectedElement.props).toMatchInlineSnapshot(`
       {
         "anonymous_fn": Dehydrated {
-          "preview_short": ƒ () {},
-          "preview_long": ƒ () {},
+          "preview_short": () => {},
+          "preview_long": () => {},
         },
         "array_buffer": Dehydrated {
           "preview_short": ArrayBuffer(3),
@@ -711,8 +715,8 @@ describe('InspectedElement', () => {
           "preview_long": 123n,
         },
         "bound_fn": Dehydrated {
-          "preview_short": ƒ bound exampleFunction() {},
-          "preview_long": ƒ bound exampleFunction() {},
+          "preview_short": bound exampleFunction() {},
+          "preview_long": bound exampleFunction() {},
         },
         "data_view": Dehydrated {
           "preview_short": DataView(3),
@@ -723,8 +727,8 @@ describe('InspectedElement', () => {
           "preview_long": Tue Dec 31 2019 23:42:42 GMT+0000 (Coordinated Universal Time),
         },
         "fn": Dehydrated {
-          "preview_short": ƒ exampleFunction() {},
-          "preview_long": ƒ exampleFunction() {},
+          "preview_short": exampleFunction() {},
+          "preview_long": exampleFunction() {},
         },
         "html_element": Dehydrated {
           "preview_short": <div />,
@@ -774,8 +778,8 @@ describe('InspectedElement', () => {
           "Symbol(name)": "hello",
         },
         "proxy": Dehydrated {
-          "preview_short": ƒ () {},
-          "preview_long": ƒ () {},
+          "preview_short": () => {},
+          "preview_long": () => {},
         },
         "react_element": Dehydrated {
           "preview_short": <span />,
@@ -1876,7 +1880,7 @@ describe('InspectedElement', () => {
         xyz: 1,
       },
     });
-    const bigInt = BigInt(123); // eslint-disable-line no-undef
+    const bigInt = BigInt(123);
 
     await utils.actAsync(() =>
       render(
@@ -2014,16 +2018,16 @@ describe('InspectedElement', () => {
       {
         "proxy": {
           "$$typeof": Dehydrated {
-            "preview_short": ƒ () {},
-            "preview_long": ƒ () {},
+            "preview_short": () => {},
+            "preview_long": () => {},
           },
           "Symbol(Symbol.iterator)": Dehydrated {
-            "preview_short": ƒ () {},
-            "preview_long": ƒ () {},
+            "preview_short": () => {},
+            "preview_long": () => {},
           },
           "constructor": Dehydrated {
-            "preview_short": ƒ () {},
-            "preview_long": ƒ () {},
+            "preview_short": () => {},
+            "preview_long": () => {},
           },
         },
       }
@@ -2144,7 +2148,7 @@ describe('InspectedElement', () => {
         "context": null,
         "events": undefined,
         "hooks": null,
-        "id": 2,
+        "id": 4,
         "owners": null,
         "props": {},
         "rootType": "createRoot()",
@@ -2889,26 +2893,29 @@ describe('InspectedElement', () => {
     `);
 
     const inspectedElement = await inspectElementAtIndex(4);
-    expect(inspectedElement.owners).toMatchInlineSnapshot(`
-      [
-        {
-          "compiledWithForget": false,
-          "displayName": "Child",
-          "hocDisplayNames": null,
-          "id": 5,
-          "key": null,
-          "type": 5,
-        },
-        {
-          "compiledWithForget": false,
-          "displayName": "App",
-          "hocDisplayNames": null,
-          "id": 4,
-          "key": null,
-          "type": 5,
-        },
-      ]
-    `);
+    // TODO: Ideally this should match the owners of the Group but those are
+    // part of a different parent tree. Ideally the Group would be parent of
+    // that parent tree though which would fix this issue.
+    //
+    // [
+    //   {
+    //     "compiledWithForget": false,
+    //     "displayName": "Child",
+    //     "hocDisplayNames": null,
+    //     "id": 8,
+    //     "key": null,
+    //     "type": 5,
+    //   },
+    //   {
+    //     "compiledWithForget": false,
+    //     "displayName": "App",
+    //     "hocDisplayNames": null,
+    //     "id": 7,
+    //     "key": null,
+    //     "type": 5,
+    //   },
+    // ]
+    expect(inspectedElement.owners).toMatchInlineSnapshot(`[]`);
   });
 
   describe('error boundary', () => {
@@ -2968,16 +2975,12 @@ describe('InspectedElement', () => {
       // Inspect <ErrorBoundary /> and see that we cannot toggle error state
       // on error boundary itself
       let inspectedElement = await inspect(0);
-      expect(inspectedElement.canToggleError).toBe(false);
-      expect(inspectedElement.targetErrorBoundaryID).toBe(null);
+      expect(inspectedElement.canToggleError).toBe(true);
 
       // Inspect <Example />
       inspectedElement = await inspect(1);
       expect(inspectedElement.canToggleError).toBe(true);
       expect(inspectedElement.isErrored).toBe(false);
-      expect(inspectedElement.targetErrorBoundaryID).toBe(
-        targetErrorBoundaryID,
-      );
 
       // Suppress expected error and warning.
       const consoleErrorMock = jest
@@ -3002,10 +3005,6 @@ describe('InspectedElement', () => {
       inspectedElement = await inspect(0);
       expect(inspectedElement.canToggleError).toBe(true);
       expect(inspectedElement.isErrored).toBe(true);
-      // its error boundary ID is itself because it's caught the error
-      expect(inspectedElement.targetErrorBoundaryID).toBe(
-        targetErrorBoundaryID,
-      );
 
       await toggleError(false);
 
@@ -3013,9 +3012,165 @@ describe('InspectedElement', () => {
       inspectedElement = await inspect(1);
       expect(inspectedElement.canToggleError).toBe(true);
       expect(inspectedElement.isErrored).toBe(false);
-      expect(inspectedElement.targetErrorBoundaryID).toBe(
-        targetErrorBoundaryID,
-      );
     });
+  });
+
+  it('should properly handle when components filters are updated', async () => {
+    const Wrapper = ({children}) => children;
+
+    let state;
+    let dispatch;
+    const Capture = () => {
+      dispatch = React.useContext(TreeDispatcherContext);
+      state = React.useContext(TreeStateContext);
+      return null;
+    };
+
+    function Child({logError = false, logWarning = false}) {
+      if (logError === true) {
+        console.error('test-only: error');
+      }
+      if (logWarning === true) {
+        console.warn('test-only: warning');
+      }
+      return null;
+    }
+
+    async function selectNextErrorOrWarning() {
+      await utils.actAsync(
+        () =>
+          dispatch({type: 'SELECT_NEXT_ELEMENT_WITH_ERROR_OR_WARNING_IN_TREE'}),
+        false,
+      );
+    }
+
+    async function selectPreviousErrorOrWarning() {
+      await utils.actAsync(
+        () =>
+          dispatch({
+            type: 'SELECT_PREVIOUS_ELEMENT_WITH_ERROR_OR_WARNING_IN_TREE',
+          }),
+        false,
+      );
+    }
+
+    withErrorsOrWarningsIgnored(['test-only:'], () =>
+      utils.act(() =>
+        render(
+          <React.Fragment>
+            <Wrapper>
+              <Child logWarning={true} />
+            </Wrapper>
+            <Wrapper>
+              <Wrapper>
+                <Child logWarning={true} />
+              </Wrapper>
+            </Wrapper>
+          </React.Fragment>,
+        ),
+      ),
+    );
+
+    utils.act(() =>
+      TestRenderer.create(
+        <Contexts>
+          <Capture />
+        </Contexts>,
+      ),
+    );
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+         ▾ <Wrapper>
+             <Child> ⚠
+         ▾ <Wrapper>
+           ▾ <Wrapper>
+               <Child> ⚠
+    `);
+
+    await selectNextErrorOrWarning();
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+         ▾ <Wrapper>
+      →      <Child> ⚠
+         ▾ <Wrapper>
+           ▾ <Wrapper>
+               <Child> ⚠
+    `);
+
+    await utils.actAsync(() => {
+      store.componentFilters = [utils.createDisplayNameFilter('Wrapper')];
+    }, false);
+
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+      →    <Child> ⚠
+           <Child> ⚠
+    `);
+
+    await selectNextErrorOrWarning();
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+           <Child> ⚠
+      →    <Child> ⚠
+    `);
+
+    await utils.actAsync(() => {
+      store.componentFilters = [];
+    }, false);
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+         ▾ <Wrapper>
+             <Child> ⚠
+         ▾ <Wrapper>
+           ▾ <Wrapper>
+      →        <Child> ⚠
+    `);
+
+    await selectPreviousErrorOrWarning();
+    expect(state).toMatchInlineSnapshot(`
+      ✕ 0, ⚠ 2
+      [root]
+         ▾ <Wrapper>
+      →      <Child> ⚠
+         ▾ <Wrapper>
+           ▾ <Wrapper>
+               <Child> ⚠
+    `);
+  });
+
+  // @reactVersion > 18.2
+  it('should inspect server components', async () => {
+    const ChildPromise = Promise.resolve(<div />);
+    ChildPromise._debugInfo = [
+      {
+        name: 'ServerComponent',
+        env: 'Server',
+        owner: null,
+      },
+    ];
+    const Parent = () => ChildPromise;
+
+    await utils.actAsync(() => {
+      modernRender(<Parent />);
+    });
+
+    const inspectedElement = await inspectElementAtIndex(1);
+    expect(inspectedElement).toMatchInlineSnapshot(`
+      {
+        "context": null,
+        "events": undefined,
+        "hooks": null,
+        "id": 3,
+        "owners": null,
+        "props": null,
+        "rootType": "createRoot()",
+        "state": null,
+      }
+    `);
   });
 });

@@ -29,10 +29,10 @@ function Component(props) {
 import { c as _c } from "react/compiler-runtime";
 function Component(props) {
   const $ = _c(8);
-  let x;
+  let t0;
   let y;
-  if ($[0] !== props) {
-    x = [];
+  if ($[0] !== props.p0 || $[1] !== props.p2 || $[2] !== props.p3) {
+    const x = [];
     switch (props.p0) {
       case true: {
         x.push(props.p2);
@@ -42,28 +42,24 @@ function Component(props) {
         y = x;
       }
     }
-    $[0] = props;
-    $[1] = x;
-    $[2] = y;
-  } else {
-    x = $[1];
-    y = $[2];
-  }
-  let t0;
-  if ($[3] !== x) {
+
     t0 = <Component data={x} />;
-    $[3] = x;
-    $[4] = t0;
+    $[0] = props.p0;
+    $[1] = props.p2;
+    $[2] = props.p3;
+    $[3] = t0;
+    $[4] = y;
   } else {
-    t0 = $[4];
+    t0 = $[3];
+    y = $[4];
   }
   const child = t0;
   y.push(props.p4);
   let t1;
-  if ($[5] !== y || $[6] !== child) {
+  if ($[5] !== child || $[6] !== y) {
     t1 = <Component data={y}>{child}</Component>;
-    $[5] = y;
-    $[6] = child;
+    $[5] = child;
+    $[6] = y;
     $[7] = t1;
   } else {
     t1 = $[7];
