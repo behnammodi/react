@@ -18,6 +18,7 @@ let act;
 let useEffect;
 let assertLog;
 let waitForAll;
+let assertConsoleErrorDev;
 
 describe('ReactDOMRoot', () => {
   let container;
@@ -31,6 +32,8 @@ describe('ReactDOMRoot', () => {
     ReactDOMServer = require('react-dom/server');
     Scheduler = require('scheduler');
     act = require('internal-test-utils').act;
+    assertConsoleErrorDev =
+      require('internal-test-utils').assertConsoleErrorDev;
     useEffect = React.useEffect;
 
     const InternalTestUtils = require('internal-test-utils');
@@ -48,11 +51,11 @@ describe('ReactDOMRoot', () => {
   it('warns if a callback parameter is provided to render', async () => {
     const callback = jest.fn();
     const root = ReactDOMClient.createRoot(container);
-    expect(() => root.render(<div>Hi</div>, callback)).toErrorDev(
+    root.render(<div>Hi</div>, callback);
+    assertConsoleErrorDev([
       'does not support the second callback argument. ' +
         'To execute a side effect after rendering, declare it in a component body with useEffect().',
-      {withoutStack: true},
-    );
+    ]);
     await waitForAll([]);
     expect(callback).not.toHaveBeenCalled();
   });
@@ -63,13 +66,11 @@ describe('ReactDOMRoot', () => {
     }
 
     const root = ReactDOMClient.createRoot(container);
-    expect(() => root.render(<App />, {})).toErrorDev(
+    root.render(<App />, {});
+    assertConsoleErrorDev([
       'You passed a second argument to root.render(...) but it only accepts ' +
         'one argument.',
-      {
-        withoutStack: true,
-      },
-    );
+    ]);
   });
 
   it('warn if a container is passed to root.render(...)', async () => {
@@ -78,25 +79,23 @@ describe('ReactDOMRoot', () => {
     }
 
     const root = ReactDOMClient.createRoot(container);
-    expect(() => root.render(<App />, container)).toErrorDev(
+    root.render(<App />, container);
+    assertConsoleErrorDev([
       'You passed a container to the second argument of root.render(...). ' +
         "You don't need to pass it again since you already passed it to create " +
         'the root.',
-      {
-        withoutStack: true,
-      },
-    );
+    ]);
   });
 
   it('warns if a callback parameter is provided to unmount', async () => {
     const callback = jest.fn();
     const root = ReactDOMClient.createRoot(container);
     root.render(<div>Hi</div>);
-    expect(() => root.unmount(callback)).toErrorDev(
+    root.unmount(callback);
+    assertConsoleErrorDev([
       'does not support a callback argument. ' +
         'To execute a side effect after rendering, declare it in a component body with useEffect().',
-      {withoutStack: true},
-    );
+    ]);
     await waitForAll([]);
     expect(callback).not.toHaveBeenCalled();
   });
@@ -148,10 +147,27 @@ describe('ReactDOMRoot', () => {
         <span />
       </div>,
     );
-    await expect(async () => await waitForAll([])).toErrorDev(
-      "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties.",
-      {withoutStack: true},
-    );
+    await waitForAll([]);
+    assertConsoleErrorDev([
+      "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. " +
+        "This won't be patched up. This can happen if a SSR-ed Client Component used:\n" +
+        '\n' +
+        "- A server/client branch `if (typeof window !== 'undefined')`.\n" +
+        "- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n" +
+        "- Date formatting in a user's locale which doesn't match the server.\n" +
+        '- External changing data without sending a snapshot of it along with the HTML.\n' +
+        '- Invalid HTML tag nesting.\n' +
+        '\n' +
+        'It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n' +
+        '\n' +
+        'https://react.dev/link/hydration-mismatch\n' +
+        '\n' +
+        '  <div>\n' +
+        '    <span\n' +
+        '-     className="extra"\n' +
+        '    >\n' +
+        '\n    in span (at **)',
+    ]);
   });
 
   it('clears existing children', async () => {
@@ -183,14 +199,12 @@ describe('ReactDOMRoot', () => {
 
   it('warns when creating two roots managing the same container', () => {
     ReactDOMClient.createRoot(container);
-    expect(() => {
-      ReactDOMClient.createRoot(container);
-    }).toErrorDev(
+    ReactDOMClient.createRoot(container);
+    assertConsoleErrorDev([
       'You are calling ReactDOMClient.createRoot() on a container that ' +
         'has already been passed to createRoot() before. Instead, call ' +
         'root.render() on the existing root instead if you want to update it.',
-      {withoutStack: true},
-    );
+    ]);
   });
 
   it('does not warn when creating second root after first one is unmounted', async () => {
@@ -352,14 +366,15 @@ describe('ReactDOMRoot', () => {
     });
     expect(container1.textContent).toEqual('Hi');
 
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root1.render(<App step={2} />);
-      });
-    }).toErrorDev(
-      'Attempted to synchronously unmount a root while React was ' +
-        'already rendering.',
-    );
+    ReactDOM.flushSync(() => {
+      root1.render(<App step={2} />);
+    });
+    assertConsoleErrorDev([
+      'Attempted to synchronously unmount a root while React was already rendering. ' +
+        'React cannot finish unmounting the root until the current render has completed, ' +
+        'which may lead to a race condition.\n' +
+        '    in App (at **)',
+    ]);
   });
 
   // @gate disableCommentsAsDOMContainers
@@ -378,10 +393,11 @@ describe('ReactDOMRoot', () => {
   });
 
   it('warn if no children passed to hydrateRoot', async () => {
-    expect(() => ReactDOMClient.hydrateRoot(container)).toErrorDev(
-      'Must provide initial children as second argument to hydrateRoot.',
-      {withoutStack: true},
-    );
+    ReactDOMClient.hydrateRoot(container);
+    assertConsoleErrorDev([
+      'Must provide initial children as second argument to hydrateRoot. ' +
+        'Example usage: hydrateRoot(domContainer, <App />)',
+    ]);
   });
 
   it('warn if JSX passed to createRoot', async () => {
@@ -389,13 +405,14 @@ describe('ReactDOMRoot', () => {
       return 'Child';
     }
 
-    expect(() => ReactDOMClient.createRoot(container, <App />)).toErrorDev(
-      'You passed a JSX element to createRoot. You probably meant to call ' +
-        'root.render instead',
-      {
-        withoutStack: true,
-      },
-    );
+    ReactDOMClient.createRoot(container, <App />);
+    assertConsoleErrorDev([
+      'You passed a JSX element to createRoot. You probably meant to call root.render instead. ' +
+        'Example usage:\n' +
+        '\n' +
+        '  let root = createRoot(domContainer);\n' +
+        '  root.render(<App />);',
+    ]);
   });
 
   it('warns when given a function', () => {
@@ -405,30 +422,26 @@ describe('ReactDOMRoot', () => {
 
     const root = ReactDOMClient.createRoot(document.createElement('div'));
 
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(Component);
-      });
-    }).toErrorDev(
+    ReactDOM.flushSync(() => {
+      root.render(Component);
+    });
+    assertConsoleErrorDev([
       'Functions are not valid as a React child. ' +
         'This may happen if you return Component instead of <Component /> from render. ' +
         'Or maybe you meant to call this function rather than return it.\n' +
         '  root.render(Component)',
-      {withoutStack: true},
-    );
+    ]);
   });
 
   it('warns when given a symbol', () => {
     const root = ReactDOMClient.createRoot(document.createElement('div'));
 
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(Symbol('foo'));
-      });
-    }).toErrorDev(
+    ReactDOM.flushSync(() => {
+      root.render(Symbol('foo'));
+    });
+    assertConsoleErrorDev([
       'Symbols are not valid as a React child.\n' +
         '  root.render(Symbol(foo))',
-      {withoutStack: true},
-    );
+    ]);
   });
 });

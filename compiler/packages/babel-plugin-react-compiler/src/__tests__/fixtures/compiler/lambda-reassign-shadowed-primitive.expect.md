@@ -37,13 +37,13 @@ function Component() {
   }
   const x = t0;
 
-  let x_0;
-  x_0 = 56;
+  let x_0 = 56;
   const fn = function () {
     x_0 = 42;
   };
 
   fn();
+
   return x;
 }
 

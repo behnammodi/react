@@ -14,6 +14,7 @@ let ReactDOMClient;
 let ReactFeatureFlags;
 let act;
 let container;
+let assertConsoleErrorDev;
 
 function loadModules({
   enableProfilerTimer = true,
@@ -31,6 +32,7 @@ function loadModules({
   ReactDOMClient = require('react-dom/client');
   const InternalTestUtils = require('internal-test-utils');
   act = InternalTestUtils.act;
+  assertConsoleErrorDev = InternalTestUtils.assertConsoleErrorDev;
 }
 
 describe('Profiler', () => {
@@ -54,16 +56,12 @@ describe('Profiler', () => {
         if (__DEV__ && enableProfilerTimer) {
           it('should warn if required params are missing', async () => {
             const root = ReactDOMClient.createRoot(container);
-            await expect(async () => {
-              await act(() => {
-                root.render(<React.Profiler />);
-              });
-            }).toErrorDev(
+            await act(() => {
+              root.render(<React.Profiler />);
+            });
+            assertConsoleErrorDev([
               'Profiler must specify an "id" of type `string` as a prop. Received the type `undefined` instead.',
-              {
-                withoutStack: true,
-              },
-            );
+            ]);
           });
         }
 

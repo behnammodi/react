@@ -27,6 +27,7 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-background-selected': '#0088fa',
     '--color-button-background': '#ffffff',
     '--color-button-background-focus': '#ededed',
+    '--color-button-background-hover': 'rgba(0, 0, 0, 0.2)',
     '--color-button': '#5f6673',
     '--color-button-disabled': '#cfd1d5',
     '--color-button-active': '#0088fa',
@@ -134,6 +135,7 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-timeline-text-color': '#000000',
     '--color-timeline-text-dim-color': '#ccc',
     '--color-timeline-react-work-border': '#eeeeee',
+    '--color-timebar-background': '#f6f6f6',
     '--color-search-match': 'yellow',
     '--color-search-match-current': '#f7923b',
     '--color-selected-tree-highlight-active': 'rgba(0, 136, 250, 0.1)',
@@ -152,6 +154,14 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-warning-text-color': '#ffffff',
     '--color-warning-text-color-inverted': '#fd4d69',
 
+    '--color-suspense-default': '#0088fa',
+    '--color-transition-default': '#6a51b2',
+    '--color-suspense-server': '#62bc6a',
+    '--color-transition-server': '#3f7844',
+    '--color-suspense-other': '#f3ce49',
+    '--color-transition-other': '#917b2c',
+    '--color-suspense-errored': '#d57066',
+
     // The styles below should be kept in sync with 'root.css'
     // They are repeated there because they're used by e.g. tooltips or context menus
     // which get rendered outside of the DOM subtree (where normal theme/styles are written).
@@ -159,6 +169,9 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-scroll-track': '#fafafa',
     '--color-tooltip-background': 'rgba(0, 0, 0, 0.9)',
     '--color-tooltip-text': '#ffffff',
+
+    '--elevation-4':
+      '0 2px 4px -1px rgba(0,0,0,.2),0 4px 5px 0 rgba(0,0,0,.14),0 1px 10px 0 rgba(0,0,0,.12)',
   },
   dark: {
     '--color-attribute-name': '#9d87d2',
@@ -174,6 +187,7 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-background-selected': '#178fb9',
     '--color-button-background': '#282c34',
     '--color-button-background-focus': '#3d424a',
+    '--color-button-background-hover': 'rgba(255, 255, 255, 0.2)',
     '--color-button': '#afb3b9',
     '--color-button-active': '#61dafb',
     '--color-button-disabled': '#4f5766',
@@ -281,6 +295,7 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-timeline-text-color': '#282c34',
     '--color-timeline-text-dim-color': '#555b66',
     '--color-timeline-react-work-border': '#3d424a',
+    '--color-timebar-background': '#1d2129',
     '--color-search-match': 'yellow',
     '--color-search-match-current': '#f7923b',
     '--color-selected-tree-highlight-active': 'rgba(23, 143, 185, 0.15)',
@@ -300,6 +315,14 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-warning-text-color': '#ffffff',
     '--color-warning-text-color-inverted': '#ee1638',
 
+    '--color-suspense-default': '#61dafb',
+    '--color-transition-default': '#6a51b2',
+    '--color-suspense-server': '#62bc6a',
+    '--color-transition-server': '#3f7844',
+    '--color-suspense-other': '#f3ce49',
+    '--color-transition-other': '#917b2c',
+    '--color-suspense-errored': '#d57066',
+
     // The styles below should be kept in sync with 'root.css'
     // They are repeated there because they're used by e.g. tooltips or context menus
     // which get rendered outside of the DOM subtree (where normal theme/styles are written).
@@ -307,6 +330,9 @@ export const THEME_STYLES: {[style: Theme | DisplayDensity]: any, ...} = {
     '--color-scroll-track': '#313640',
     '--color-tooltip-background': 'rgba(255, 255, 255, 0.95)',
     '--color-tooltip-text': '#000000',
+
+    '--elevation-4':
+      '0 2px 8px 0 rgba(0,0,0,0.32),0 4px 12px 0 rgba(0,0,0,0.24),0 1px 10px 0 rgba(0,0,0,0.18)',
   },
   compact: {
     '--font-size-monospace-small': '9px',

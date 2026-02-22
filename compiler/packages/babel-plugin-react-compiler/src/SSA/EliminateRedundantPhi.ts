@@ -6,12 +6,20 @@
  */
 
 import {CompilerError} from '../CompilerError';
-import {BlockId, HIRFunction, Identifier, Place} from '../HIR/HIR';
+import {
+  BlockId,
+  GeneratedSource,
+  HIRFunction,
+  Identifier,
+  Place,
+} from '../HIR/HIR';
 import {
   eachInstructionLValue,
   eachInstructionOperand,
   eachTerminalOperand,
 } from '../HIR/visitors';
+
+const DEBUG = false;
 
 /*
  * Pass to eliminate redundant phi nodes:
@@ -94,9 +102,7 @@ export function eliminateRedundantPhi(
         }
         CompilerError.invariant(same !== null, {
           reason: 'Expected phis to be non-empty',
-          description: null,
-          loc: null,
-          suggestions: null,
+          loc: GeneratedSource,
         });
         rewrites.set(phi.place.identifier, same);
         block.phis.delete(phi);
@@ -141,6 +147,23 @@ export function eliminateRedundantPhi(
      * have already propagated forwards since we visit in reverse postorder.
      */
   } while (rewrites.size > size && hasBackEdge);
+
+  if (DEBUG) {
+    for (const [, block] of ir.blocks) {
+      for (const phi of block.phis) {
+        CompilerError.invariant(!rewrites.has(phi.place.identifier), {
+          reason: '[EliminateRedundantPhis]: rewrite not complete',
+          loc: phi.place.loc,
+        });
+        for (const [, operand] of phi.operands) {
+          CompilerError.invariant(!rewrites.has(operand.identifier), {
+            reason: '[EliminateRedundantPhis]: rewrite not complete',
+            loc: phi.place.loc,
+          });
+        }
+      }
+    }
+  }
 }
 
 function rewritePlace(

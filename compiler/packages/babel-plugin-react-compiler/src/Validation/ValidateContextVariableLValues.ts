@@ -106,12 +106,11 @@ function visit(
       }
 
       CompilerError.invariant(false, {
-        reason: `Expected all references to a variable to be consistently local or context references`,
+        reason:
+          'Expected all references to a variable to be consistently local or context references',
+        description: `Identifier ${printPlace(place)} is referenced as a ${kind} variable, but was previously referenced as a ${prev.kind} variable`,
+        message: `this is ${prev.kind}`,
         loc: place.loc,
-        description: `Identifier ${printPlace(
-          place,
-        )} is referenced as a ${kind} variable, but was previously referenced as a ${prev} variable`,
-        suggestions: null,
       });
     }
   }

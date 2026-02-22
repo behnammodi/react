@@ -21,6 +21,7 @@ global.ReadableStream =
 global.TextEncoder = require('util').TextEncoder;
 
 let act;
+let serverAct;
 let assertLog;
 let waitForPaint;
 let container;
@@ -35,8 +36,9 @@ describe('ReactDOMFizzForm', () => {
   beforeEach(() => {
     jest.resetModules();
     Scheduler = require('scheduler');
-    patchMessageChannel(Scheduler);
+    patchMessageChannel();
     act = require('internal-test-utils').act;
+    serverAct = require('internal-test-utils').serverAct;
     React = require('react');
     ReactDOMServer = require('react-dom/server.browser');
     ReactDOMClient = require('react-dom/client');
@@ -51,17 +53,6 @@ describe('ReactDOMFizzForm', () => {
   afterEach(() => {
     document.body.removeChild(container);
   });
-
-  async function serverAct(callback) {
-    let maybePromise;
-    await act(() => {
-      maybePromise = callback();
-      if (maybePromise && typeof maybePromise.catch === 'function') {
-        maybePromise.catch(() => {});
-      }
-    });
-    return maybePromise;
-  }
 
   async function readIntoContainer(stream) {
     const reader = stream.getReader();
@@ -98,41 +89,6 @@ describe('ReactDOMFizzForm', () => {
     await act(() => ReactDOMClient.hydrateRoot(container, <App />));
     expect(container.textContent).toEqual('Final');
   });
-
-  // @gate enablePostpone
-  it(
-    'if initial value postpones during hydration, it will switch to the ' +
-      'final value instead',
-    async () => {
-      function Content() {
-        const isInitial = useDeferredValue(false, true);
-        if (isInitial) {
-          React.unstable_postpone();
-        }
-        return <Text text="Final" />;
-      }
-
-      function App() {
-        return (
-          <Suspense fallback={<Text text="Loading..." />}>
-            <Content />
-          </Suspense>
-        );
-      }
-
-      const stream = await serverAct(() =>
-        ReactDOMServer.renderToReadableStream(<App />),
-      );
-      await readIntoContainer(stream);
-      expect(container.textContent).toEqual('Loading...');
-
-      assertLog(['Loading...']);
-      // After hydration, it's updated to the final value
-      await act(() => ReactDOMClient.hydrateRoot(container, <App />));
-      expect(container.textContent).toEqual('Final');
-      assertLog(['Loading...', 'Final']);
-    },
-  );
 
   it(
     'useDeferredValue during hydration has higher priority than remaining ' +

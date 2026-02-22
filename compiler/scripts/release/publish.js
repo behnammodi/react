@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 'use strict';
 
@@ -62,8 +68,14 @@ async function main() {
     .option('tag', {
       description: 'Tag to publish to npm',
       type: 'choices',
-      choices: ['experimental', 'beta'],
+      choices: ['experimental', 'beta', 'rc', 'latest'],
       default: 'experimental',
+    })
+    .option('tag-version', {
+      description:
+        'Optional tag version to append to tag name, eg `1` becomes 0.0.0-rc.1',
+      type: 'number',
+      default: null,
     })
     .option('version-name', {
       description: 'Version name',
@@ -133,7 +145,18 @@ async function main() {
       files: {exclude: ['.DS_Store']},
     });
     const truncatedHash = hash.slice(0, 7);
-    const newVersion = `${argv.versionName}-${argv.tag}-${truncatedHash}-${dateString}`;
+    let newVersion;
+    if (argv.tag === 'latest') {
+      newVersion = argv.versionName;
+    } else {
+      newVersion =
+        argv.tagVersion == null || argv.tagVersion === ''
+          ? `${argv.versionName}-${argv.tag}`
+          : `${argv.versionName}-${argv.tag}.${argv.tagVersion}`;
+    }
+    if (argv.tag === 'experimental' || argv.tag === 'beta') {
+      newVersion = `${newVersion}-${truncatedHash}-${dateString}`;
+    }
 
     for (const pkgName of pkgNames) {
       const pkgDir = path.resolve(__dirname, `../../packages/${pkgName}`);
@@ -163,21 +186,9 @@ async function main() {
       if (otp != null) {
         opts.push(`--otp=${otp}`);
       }
-      /**
-       * Typically, the `latest` tag is reserved for stable package versions. Since the the compiler
-       * is still pre-release, until we have a stable release let's only add the
-       * `latest` tag to non-experimental releases.
-       *
-       * `latest` is added by default, so we only override it for experimental releases so that
-       * those don't get the `latest` tag.
-       *
-       * TODO: Update this when we have a stable release.
-       */
-      if (argv.tag === 'experimental') {
-        opts.push('--tag=experimental');
-      } else {
-        opts.push('--tag=latest');
-      }
+
+      opts.push(`--tag=${argv.tag}`);
+
       try {
         await spawnHelper(
           'npm',

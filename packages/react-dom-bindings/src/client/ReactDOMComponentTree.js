@@ -17,6 +17,7 @@ import type {
   Container,
   TextInstance,
   Instance,
+  ActivityInstance,
   SuspenseInstance,
   Props,
   HoistableRoot,
@@ -30,11 +31,14 @@ import {
   HostText,
   HostRoot,
   SuspenseComponent,
+  ActivityComponent,
 } from 'react-reconciler/src/ReactWorkTags';
 
-import {getParentSuspenseInstance} from './ReactFiberConfigDOM';
+import {getParentHydrationBoundary} from './ReactFiberConfigDOM';
 
 import {enableScopeAPI} from 'shared/ReactFeatureFlags';
+
+import {enableInternalInstanceMap} from 'shared/ReactFeatureFlags';
 
 const randomKey = Math.random().toString(36).slice(2);
 const internalInstanceKey = '__reactFiber$' + randomKey;
@@ -45,8 +49,37 @@ const internalEventHandlerListenersKey = '__reactListeners$' + randomKey;
 const internalEventHandlesSetKey = '__reactHandles$' + randomKey;
 const internalRootNodeResourcesKey = '__reactResources$' + randomKey;
 const internalHoistableMarker = '__reactMarker$' + randomKey;
+const internalScrollTimer = '__reactScroll$' + randomKey;
+
+type InstanceUnion =
+  | Instance
+  | TextInstance
+  | SuspenseInstance
+  | ActivityInstance
+  | ReactScopeInstance
+  | Container;
+
+const PossiblyWeakMap = typeof WeakMap === 'function' ? WeakMap : Map;
+const internalInstanceMap:
+  | WeakMap<InstanceUnion, Fiber>
+  | Map<InstanceUnion, Fiber> = new PossiblyWeakMap();
+const internalPropsMap:
+  | WeakMap<InstanceUnion, Props>
+  | Map<InstanceUnion, Props> = new PossiblyWeakMap();
 
 export function detachDeletedInstance(node: Instance): void {
+  if (enableInternalInstanceMap) {
+    internalInstanceMap.delete(node);
+    internalPropsMap.delete(node);
+    delete (node: any)[internalEventHandlersKey];
+    delete (node: any)[internalEventHandlerListenersKey];
+    delete (node: any)[internalEventHandlesSetKey];
+    delete (node: any)[internalRootNodeResourcesKey];
+    if (__DEV__) {
+      delete (node: any)[internalInstanceKey];
+    }
+    return;
+  }
   // TODO: This function is only called on host components. I don't think all of
   // these fields are relevant.
   delete (node: any)[internalInstanceKey];
@@ -58,8 +91,20 @@ export function detachDeletedInstance(node: Instance): void {
 
 export function precacheFiberNode(
   hostInst: Fiber,
-  node: Instance | TextInstance | SuspenseInstance | ReactScopeInstance,
+  node:
+    | Instance
+    | TextInstance
+    | SuspenseInstance
+    | ActivityInstance
+    | ReactScopeInstance,
 ): void {
+  if (enableInternalInstanceMap) {
+    internalInstanceMap.set(node, hostInst);
+    if (__DEV__) {
+      (node: any)[internalInstanceKey] = hostInst;
+    }
+    return;
+  }
   (node: any)[internalInstanceKey] = hostInst;
 }
 
@@ -80,15 +125,21 @@ export function isContainerMarkedAsRoot(node: Container): boolean {
 
 // Given a DOM node, return the closest HostComponent or HostText fiber ancestor.
 // If the target node is part of a hydrated or not yet rendered subtree, then
-// this may also return a SuspenseComponent or HostRoot to indicate that.
+// this may also return a SuspenseComponent, ActivityComponent or HostRoot to
+// indicate that.
 // Conceptually the HostRoot fiber is a child of the Container node. So if you
 // pass the Container node as the targetNode, you will not actually get the
 // HostRoot back. To get to the HostRoot, you need to pass a child of it.
-// The same thing applies to Suspense boundaries.
+// The same thing applies to Suspense and Activity boundaries.
 export function getClosestInstanceFromNode(targetNode: Node): null | Fiber {
-  let targetInst = (targetNode: any)[internalInstanceKey];
+  let targetInst: void | Fiber;
+  if (enableInternalInstanceMap) {
+    targetInst = internalInstanceMap.get(((targetNode: any): InstanceUnion));
+  } else {
+    targetInst = (targetNode: any)[internalInstanceKey];
+  }
   if (targetInst) {
-    // Don't return HostRoot or SuspenseComponent here.
+    // Don't return HostRoot, SuspenseComponent or ActivityComponent here.
     return targetInst;
   }
   // If the direct event target isn't a React owned DOM node, we need to look
@@ -103,9 +154,15 @@ export function getClosestInstanceFromNode(targetNode: Node): null | Fiber {
     // itself because the fibers are conceptually between the container
     // node and the first child. It isn't surrounding the container node.
     // If it's not a container, we check if it's an instance.
-    targetInst =
-      (parentNode: any)[internalContainerInstanceKey] ||
-      (parentNode: any)[internalInstanceKey];
+    if (enableInternalInstanceMap) {
+      targetInst =
+        (parentNode: any)[internalContainerInstanceKey] ||
+        internalInstanceMap.get(((parentNode: any): InstanceUnion));
+    } else {
+      targetInst =
+        (parentNode: any)[internalContainerInstanceKey] ||
+        (parentNode: any)[internalInstanceKey];
+    }
     if (targetInst) {
       // Since this wasn't the direct target of the event, we might have
       // stepped past dehydrated DOM nodes to get here. However they could
@@ -128,8 +185,8 @@ export function getClosestInstanceFromNode(targetNode: Node): null | Fiber {
       ) {
         // Next we need to figure out if the node that skipped past is
         // nested within a dehydrated boundary and if so, which one.
-        let suspenseInstance = getParentSuspenseInstance(targetNode);
-        while (suspenseInstance !== null) {
+        let hydrationInstance = getParentHydrationBoundary(targetNode);
+        while (hydrationInstance !== null) {
           // We found a suspense instance. That means that we haven't
           // hydrated it yet. Even though we leave the comments in the
           // DOM after hydrating, and there are boundaries in the DOM
@@ -138,16 +195,18 @@ export function getClosestInstanceFromNode(targetNode: Node): null | Fiber {
           // have had an internalInstanceKey on it.
           // Let's get the fiber associated with the SuspenseComponent
           // as the deepest instance.
-          // $FlowFixMe[prop-missing]
-          const targetSuspenseInst = suspenseInstance[internalInstanceKey];
-          if (targetSuspenseInst) {
-            return targetSuspenseInst;
+          const targetFiber = enableInternalInstanceMap
+            ? internalInstanceMap.get(hydrationInstance)
+            : // $FlowFixMe[prop-missing]
+              hydrationInstance[internalInstanceKey];
+          if (targetFiber) {
+            return targetFiber;
           }
           // If we don't find a Fiber on the comment, it might be because
           // we haven't gotten to hydrate it yet. There might still be a
           // parent boundary that hasn't above this one so we need to find
           // the outer most that is known.
-          suspenseInstance = getParentSuspenseInstance(suspenseInstance);
+          hydrationInstance = getParentHydrationBoundary(hydrationInstance);
           // If we don't find one, then that should mean that the parent
           // host component also hasn't hydrated yet. We can return it
           // below since it will bail out on the isMounted check later.
@@ -166,15 +225,23 @@ export function getClosestInstanceFromNode(targetNode: Node): null | Fiber {
  * instance, or null if the node was not rendered by this React.
  */
 export function getInstanceFromNode(node: Node): Fiber | null {
-  const inst =
-    (node: any)[internalInstanceKey] ||
-    (node: any)[internalContainerInstanceKey];
+  let inst: void | null | Fiber;
+  if (enableInternalInstanceMap) {
+    inst =
+      internalInstanceMap.get(((node: any): InstanceUnion)) ||
+      (node: any)[internalContainerInstanceKey];
+  } else {
+    inst =
+      (node: any)[internalInstanceKey] ||
+      (node: any)[internalContainerInstanceKey];
+  }
   if (inst) {
     const tag = inst.tag;
     if (
       tag === HostComponent ||
       tag === HostText ||
       tag === SuspenseComponent ||
+      tag === ActivityComponent ||
       tag === HostHoistable ||
       tag === HostSingleton ||
       tag === HostRoot
@@ -210,20 +277,31 @@ export function getNodeFromInstance(inst: Fiber): Instance | TextInstance {
 }
 
 export function getFiberCurrentPropsFromNode(
-  node: Instance | TextInstance | SuspenseInstance,
-): Props {
+  node:
+    | Container
+    | Instance
+    | TextInstance
+    | SuspenseInstance
+    | ActivityInstance,
+): Props | null {
+  if (enableInternalInstanceMap) {
+    return internalPropsMap.get(node) || null;
+  }
   return (node: any)[internalPropsKey] || null;
 }
 
-export function updateFiberProps(
-  node: Instance | TextInstance | SuspenseInstance,
-  props: Props,
-): void {
+export function updateFiberProps(node: Instance, props: Props): void {
+  if (enableInternalInstanceMap) {
+    internalPropsMap.set(node, props);
+    return;
+  }
   (node: any)[internalPropsKey] = props;
 }
 
 export function getEventListenerSet(node: EventTarget): Set<string> {
-  let elementListenerSet = (node: any)[internalEventHandlersKey];
+  let elementListenerSet: Set<string> | void = (node: any)[
+    internalEventHandlersKey
+  ];
   if (elementListenerSet === undefined) {
     elementListenerSet = (node: any)[internalEventHandlersKey] = new Set();
   }
@@ -234,6 +312,9 @@ export function getFiberFromScopeInstance(
   scope: ReactScopeInstance,
 ): null | Fiber {
   if (enableScopeAPI) {
+    if (enableInternalInstanceMap) {
+      return internalInstanceMap.get(((scope: any): InstanceUnion)) || null;
+    }
     return (scope: any)[internalInstanceKey] || null;
   }
   return null;
@@ -293,7 +374,25 @@ export function markNodeAsHoistable(node: Node) {
   (node: any)[internalHoistableMarker] = true;
 }
 
+export function getScrollEndTimer(node: EventTarget): ?TimeoutID {
+  return (node: any)[internalScrollTimer];
+}
+
+export function setScrollEndTimer(node: EventTarget, timer: TimeoutID): void {
+  (node: any)[internalScrollTimer] = timer;
+}
+
+export function clearScrollEndTimer(node: EventTarget): void {
+  (node: any)[internalScrollTimer] = undefined;
+}
+
 export function isOwnedInstance(node: Node): boolean {
+  if (enableInternalInstanceMap) {
+    return !!(
+      (node: any)[internalHoistableMarker] ||
+      internalInstanceMap.has((node: any))
+    );
+  }
   return !!(
     (node: any)[internalHoistableMarker] || (node: any)[internalInstanceKey]
   );

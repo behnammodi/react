@@ -672,9 +672,10 @@ describe('ReactDOMEventListener', () => {
         reactEventType: 'submit',
         nativeEvent: 'submit',
         dispatch(node) {
-          const e = new Event('submit', {
+          const e = new SubmitEvent('submit', {
             bubbles: true,
             cancelable: true,
+            submitter: null,
           });
           node.dispatchEvent(e);
         },
@@ -828,6 +829,40 @@ describe('ReactDOMEventListener', () => {
             new Event('wheel', {
               bubbles: true,
               cancelable: true,
+            }),
+          );
+        },
+      });
+    });
+
+    it('onFullscreenChange', async () => {
+      await testNativeBubblingEvent({
+        type: 'div',
+        reactEvent: 'onFullscreenChange',
+        reactEventType: 'fullscreenchange',
+        nativeEvent: 'fullscreenchange',
+        dispatch(node) {
+          node.dispatchEvent(
+            new Event('fullscreenchange', {
+              bubbles: true,
+              cancelable: false,
+            }),
+          );
+        },
+      });
+    });
+
+    it('onFullscreenError', async () => {
+      await testNativeBubblingEvent({
+        type: 'div',
+        reactEvent: 'onFullscreenError',
+        reactEventType: 'fullscreenerror',
+        nativeEvent: 'fullscreenerror',
+        dispatch(node) {
+          node.dispatchEvent(
+            new Event('fullscreenerror', {
+              bubbles: true,
+              cancelable: false,
             }),
           );
         },
@@ -1289,6 +1324,38 @@ describe('ReactDOMEventListener', () => {
       await testEmulatedBubblingEvent({
         type: 'div',
         targetProps: {popover: 'any'},
+        reactEvent: 'onToggle',
+        reactEventType: 'toggle',
+        nativeEvent: 'toggle',
+        dispatch(node) {
+          const e = new Event('toggle', {
+            bubbles: false,
+            cancelable: true,
+          });
+          node.dispatchEvent(e);
+        },
+      });
+    });
+
+    it('onBeforeToggle Dialog API', async () => {
+      await testEmulatedBubblingEvent({
+        type: 'dialog',
+        reactEvent: 'onBeforeToggle',
+        reactEventType: 'beforetoggle',
+        nativeEvent: 'beforetoggle',
+        dispatch(node) {
+          const e = new Event('beforetoggle', {
+            bubbles: false,
+            cancelable: true,
+          });
+          node.dispatchEvent(e);
+        },
+      });
+    });
+
+    it('onToggle Dialog API', async () => {
+      await testEmulatedBubblingEvent({
+        type: 'dialog',
         reactEvent: 'onToggle',
         reactEventType: 'toggle',
         nativeEvent: 'toggle',

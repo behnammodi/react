@@ -7,6 +7,7 @@ let useTransition;
 let useState;
 let useOptimistic;
 let textCache;
+let assertConsoleErrorDev;
 
 describe('ReactAsyncActions', () => {
   beforeEach(() => {
@@ -21,6 +22,8 @@ describe('ReactAsyncActions', () => {
     Scheduler = require('scheduler');
     act = require('internal-test-utils').act;
     assertLog = require('internal-test-utils').assertLog;
+    assertConsoleErrorDev =
+      require('internal-test-utils').assertConsoleErrorDev;
     useTransition = React.useTransition;
     useState = React.useState;
     useOptimistic = React.useOptimistic;
@@ -121,7 +124,6 @@ describe('ReactAsyncActions', () => {
     return text;
   }
 
-  // @gate enableAsyncActions
   it('isPending remains true until async action finishes', async () => {
     let startTransition;
     function App() {
@@ -154,7 +156,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput('Pending: false');
   });
 
-  // @gate enableAsyncActions
   it('multiple updates in an async action scope are entangled together', async () => {
     let startTransition;
     function App({text}) {
@@ -210,7 +211,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('multiple async action updates in the same scope are entangled together', async () => {
     let setStepA;
     function A() {
@@ -301,10 +301,9 @@ describe('ReactAsyncActions', () => {
       'Async action ended',
       'Pending: false',
       'Suspend! [A1]',
-
-      ...(gate('enableSiblingPrerendering')
-        ? ['Suspend! [B1]', 'Suspend! [C1]']
-        : []),
+      // pre-warming
+      'Suspend! [B1]',
+      'Suspend! [C1]',
     ]);
     expect(root).toMatchRenderedOutput(
       <>
@@ -321,8 +320,8 @@ describe('ReactAsyncActions', () => {
       'Pending: false',
       'A1',
       'Suspend! [B1]',
-
-      ...(gate('enableSiblingPrerendering') ? ['Suspend! [C1]'] : []),
+      // pre-warming
+      'Suspend! [C1]',
     ]);
     expect(root).toMatchRenderedOutput(
       <>
@@ -350,7 +349,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('urgent updates are not blocked during an async action', async () => {
     let setStepA;
     function A() {
@@ -431,7 +429,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it("if a sync action throws, it's rethrown from the `useTransition`", async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -473,7 +470,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput('Oops!');
   });
 
-  // @gate enableAsyncActions
   it("if an async action throws, it's rethrown from the `useTransition`", async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -521,34 +517,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput('Oops!');
   });
 
-  // @gate !enableAsyncActions
-  it('when enableAsyncActions is disabled, and a sync action throws, `isPending` is turned off', async () => {
-    let startTransition;
-    function App() {
-      const [isPending, _start] = useTransition();
-      startTransition = _start;
-      return <Text text={'Pending: ' + isPending} />;
-    }
-
-    const root = ReactNoop.createRoot();
-    await act(() => {
-      root.render(<App />);
-    });
-    assertLog(['Pending: false']);
-    expect(root).toMatchRenderedOutput('Pending: false');
-
-    await act(() => {
-      expect(() => {
-        startTransition(() => {
-          throw new Error('Oops!');
-        });
-      }).toThrow('Oops!');
-    });
-    assertLog(['Pending: true', 'Pending: false']);
-    expect(root).toMatchRenderedOutput('Pending: false');
-  });
-
-  // @gate enableAsyncActions
   it('if there are multiple entangled actions, and one of them errors, it only affects that action', async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -665,7 +633,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic can be used to implement a pending state', async () => {
     const startTransition = React.startTransition;
 
@@ -715,7 +682,6 @@ describe('ReactAsyncActions', () => {
     ]);
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic rebases pending updates on top of passthrough value', async () => {
     let serverCart = ['A'];
 
@@ -836,7 +802,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it(
     'regression: when there are no pending transitions, useOptimistic should ' +
       'always return the passthrough value',
@@ -882,7 +847,6 @@ describe('ReactAsyncActions', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it('regression: useOptimistic during setState-in-render', async () => {
     // This is a regression test for a very specific case where useOptimistic is
     // the first hook in the component, it has a pending update, and a later
@@ -920,7 +884,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput('1');
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic accepts a custom reducer', async () => {
     let serverCart = ['A'];
 
@@ -1052,7 +1015,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic rebases if the passthrough is updated during a render phase update', async () => {
     // This is kind of an esoteric case where it's hard to come up with a
     // realistic real-world scenario but it should still work.
@@ -1137,7 +1099,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput(<div>Count: 3</div>);
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic rebases if the passthrough is updated during a render phase update (initial mount)', async () => {
     // This is kind of an esoteric case where it's hard to come up with a
     // realistic real-world scenario but it should still work.
@@ -1177,7 +1138,6 @@ describe('ReactAsyncActions', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic can update repeatedly in the same async action', async () => {
     let startTransition;
     let setLoadingProgress;
@@ -1241,7 +1201,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput(<div>B</div>);
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic warns if outside of a transition', async () => {
     let startTransition;
     let setLoadingProgress;
@@ -1274,22 +1233,19 @@ describe('ReactAsyncActions', () => {
     assertLog(['A']);
     expect(root).toMatchRenderedOutput(<div>A</div>);
 
-    await expect(async () => {
-      await act(() => {
-        setLoadingProgress('25%');
-        startTransition(() => setText('B'));
-      });
-    }).toErrorDev(
+    await act(() => {
+      setLoadingProgress('25%');
+      startTransition(() => setText('B'));
+    });
+    assertConsoleErrorDev([
       'An optimistic state update occurred outside a transition or ' +
         'action. To fix, move the update to an action, or wrap ' +
         'with startTransition.',
-      {withoutStack: true},
-    );
+    ]);
     assertLog(['Loading... (25%)', 'A', 'B']);
     expect(root).toMatchRenderedOutput(<div>B</div>);
   });
 
-  // @gate enableAsyncActions
   it(
     'optimistic state is not reverted until async action finishes, even if ' +
       'useTransition hook is unmounted',
@@ -1392,7 +1348,6 @@ describe('ReactAsyncActions', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it(
     'updates in an async action are entangled even if useTransition hook ' +
       'is unmounted before it finishes',
@@ -1480,7 +1435,6 @@ describe('ReactAsyncActions', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it(
     'updates in an async action are entangled even if useTransition hook ' +
       'is unmounted before it finishes (class component)',
@@ -1575,7 +1529,6 @@ describe('ReactAsyncActions', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it(
     'updates in an async action are entangled even if useTransition hook ' +
       'is unmounted before it finishes (root update)',
@@ -1660,7 +1613,6 @@ describe('ReactAsyncActions', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it('React.startTransition supports async actions', async () => {
     const startTransition = React.startTransition;
 
@@ -1698,7 +1650,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput('C');
   });
 
-  // @gate enableAsyncActions
   it('useOptimistic works with async actions passed to React.startTransition', async () => {
     const startTransition = React.startTransition;
 
@@ -1745,7 +1696,6 @@ describe('ReactAsyncActions', () => {
     expect(root).toMatchRenderedOutput(<span>Updated</span>);
   });
 
-  // @gate enableAsyncActions
   it(
     'regression: updates in an action passed to React.startTransition are batched ' +
       'even if there were no updates before the first await',
@@ -1816,19 +1766,14 @@ describe('ReactAsyncActions', () => {
   );
 
   it('React.startTransition captures async errors and passes them to reportError', async () => {
-    // NOTE: This is gated here instead of using the pragma because the failure
-    // happens asynchronously and the `gate` runtime doesn't capture it.
-    if (gate(flags => flags.enableAsyncActions)) {
-      await act(() => {
-        React.startTransition(async () => {
-          throw new Error('Oops');
-        });
+    await act(() => {
+      React.startTransition(async () => {
+        throw new Error('Oops');
       });
-      assertLog(['reportError: Oops']);
-    }
+    });
+    assertLog(['reportError: Oops']);
   });
 
-  // @gate enableAsyncActions
   it('React.startTransition captures sync errors and passes them to reportError', async () => {
     await act(() => {
       try {
@@ -1840,5 +1785,84 @@ describe('ReactAsyncActions', () => {
       }
     });
     assertLog(['reportError: Oops']);
+  });
+
+  // @gate enableOptimisticKey
+  it('reconciles against new items when optimisticKey is used', async () => {
+    const startTransition = React.startTransition;
+
+    function Item({text}) {
+      const [initialText] = React.useState(text);
+      return <span>{initialText + '-' + text}</span>;
+    }
+
+    let addOptimisticItem;
+    function App({items}) {
+      const [optimisticItems, _addOptimisticItem] = useOptimistic(
+        items,
+        (canonicalItems, optimisticText) =>
+          canonicalItems.concat({
+            id: React.optimisticKey,
+            text: optimisticText,
+          }),
+      );
+      addOptimisticItem = _addOptimisticItem;
+      return (
+        <div>
+          {optimisticItems.map(item => (
+            <Item key={item.id} text={item.text} />
+          ))}
+        </div>
+      );
+    }
+
+    const A = {
+      id: 'a',
+      text: 'A',
+    };
+
+    const B = {
+      id: 'b',
+      text: 'B',
+    };
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      root.render(<App items={[A]} />);
+    });
+    expect(root).toMatchRenderedOutput(
+      <div>
+        <span>A-A</span>
+      </div>,
+    );
+
+    // Start an async action using the non-hook form of startTransition. The
+    // action includes an optimistic update.
+    await act(() => {
+      startTransition(async () => {
+        addOptimisticItem('b');
+        await getText('Yield before updating');
+        startTransition(() => root.render(<App items={[A, B]} />));
+      });
+    });
+    // Because the action hasn't finished yet, the optimistic UI is shown.
+    expect(root).toMatchRenderedOutput(
+      <div>
+        <span>A-A</span>
+        <span>b-b</span>
+      </div>,
+    );
+
+    // Finish the async action. The optimistic state is reverted and replaced by
+    // the canonical state. The state is transferred to the new row.
+    await act(() => {
+      resolveText('Yield before updating');
+    });
+    expect(root).toMatchRenderedOutput(
+      <div>
+        <span>A-A</span>
+        <span>b-B</span>
+      </div>,
+    );
   });
 });

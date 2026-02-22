@@ -12,6 +12,7 @@ let textCache;
 let waitFor;
 let waitForPaint;
 let assertLog;
+let use;
 
 describe('Activity Suspense', () => {
   beforeEach(() => {
@@ -22,11 +23,12 @@ describe('Activity Suspense', () => {
     Scheduler = require('scheduler');
     act = require('internal-test-utils').act;
     LegacyHidden = React.unstable_LegacyHidden;
-    Activity = React.unstable_Activity;
+    Activity = React.Activity;
     Suspense = React.Suspense;
     useState = React.useState;
     useEffect = React.useEffect;
     startTransition = React.startTransition;
+    use = React.use;
 
     const InternalTestUtils = require('internal-test-utils');
     waitFor = InternalTestUtils.waitFor;
@@ -45,10 +47,10 @@ describe('Activity Suspense', () => {
       };
       textCache.set(text, newRecord);
     } else if (record.status === 'pending') {
-      const thenable = record.value;
+      const resolve = record.resolve;
       record.status = 'resolved';
       record.value = text;
-      thenable.pings.forEach(t => t());
+      resolve();
     }
   }
 
@@ -58,7 +60,7 @@ describe('Activity Suspense', () => {
       switch (record.status) {
         case 'pending':
           Scheduler.log(`Suspend! [${text}]`);
-          throw record.value;
+          return use(record.value);
         case 'rejected':
           throw record.value;
         case 'resolved':
@@ -66,24 +68,19 @@ describe('Activity Suspense', () => {
       }
     } else {
       Scheduler.log(`Suspend! [${text}]`);
-      const thenable = {
-        pings: [],
-        then(resolve) {
-          if (newRecord.status === 'pending') {
-            thenable.pings.push(resolve);
-          } else {
-            Promise.resolve().then(() => resolve(newRecord.value));
-          }
-        },
-      };
+      let resolve;
+      const promise = new Promise(_resolve => {
+        resolve = _resolve;
+      });
 
       const newRecord = {
         status: 'pending',
-        value: thenable,
+        value: promise,
+        resolve,
       };
       textCache.set(text, newRecord);
 
-      throw thenable;
+      return use(promise);
     }
   }
 
@@ -98,7 +95,6 @@ describe('Activity Suspense', () => {
     return text;
   }
 
-  // @gate enableActivity
   it('basic example of suspending inside hidden tree', async () => {
     const root = ReactNoop.createRoot();
 
@@ -174,7 +170,55 @@ describe('Activity Suspense', () => {
     );
   });
 
-  // @gate enableActivity
+  // @gate __DEV__
+  test('Regression: Suspending on hide should not infinite loop.', async () => {
+    // This regression only repros in public act.
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const root = ReactNoop.createRoot();
+
+    let setMode;
+    function Container({text}) {
+      const [mode, _setMode] = React.useState('visible');
+      setMode = _setMode;
+      useEffect(() => {
+        return () => {
+          Scheduler.log(`Clear [${text}]`);
+          textCache.delete(text);
+        };
+      });
+      return (
+        //$FlowFixMe
+        <Suspense fallback="Loading">
+          <Activity mode={mode}>
+            <AsyncText text={text} />
+          </Activity>
+        </Suspense>
+      );
+    }
+
+    await React.act(() => {
+      root.render(<Container text="hello" />);
+    });
+    assertLog([
+      'Suspend! [hello]',
+      // pre-warming
+      'Suspend! [hello]',
+    ]);
+    expect(root).toMatchRenderedOutput('Loading');
+
+    await React.act(async () => {
+      await resolveText('hello');
+    });
+    assertLog(['hello']);
+    expect(root).toMatchRenderedOutput('hello');
+
+    await React.act(() => {
+      setMode('hidden');
+    });
+    assertLog(['Clear [hello]', 'Suspend! [hello]']);
+    expect(root).toMatchRenderedOutput('');
+  });
+
   test("suspending inside currently hidden tree that's switching to visible", async () => {
     const root = ReactNoop.createRoot();
 
@@ -215,7 +259,12 @@ describe('Activity Suspense', () => {
         );
       });
     });
-    assertLog(['Open', 'Suspend! [Async]', 'Loading...']);
+    assertLog([
+      'Open',
+      'Suspend! [Async]',
+      // pre-warming
+      'Loading...',
+    ]);
     // It should suspend with delay to prevent the already-visible Suspense
     // boundary from switching to a fallback
     expect(root).toMatchRenderedOutput(<span>Closed</span>);
@@ -224,7 +273,12 @@ describe('Activity Suspense', () => {
     await act(async () => {
       await resolveText('Async');
     });
-    assertLog(['Open', 'Async']);
+    assertLog([
+      // pre-warming
+      'Open',
+      // end pre-warming
+      'Async',
+    ]);
     expect(root).toMatchRenderedOutput(
       <>
         <span>Open</span>
@@ -233,7 +287,6 @@ describe('Activity Suspense', () => {
     );
   });
 
-  // @gate enableActivity
   test("suspending inside currently visible tree that's switching to hidden", async () => {
     const root = ReactNoop.createRoot();
 
@@ -276,7 +329,12 @@ describe('Activity Suspense', () => {
         );
       });
     });
-    assertLog(['Open', 'Suspend! [Async]', 'Loading...']);
+    assertLog([
+      'Open',
+      'Suspend! [Async]',
+      // pre-warming
+      'Loading...',
+    ]);
     // It should suspend with delay to prevent the already-visible Suspense
     // boundary from switching to a fallback
     expect(root).toMatchRenderedOutput(
@@ -319,7 +377,6 @@ describe('Activity Suspense', () => {
     );
   });
 
-  // @gate enableActivity
   test('update that suspends inside hidden tree', async () => {
     let setText;
     function Child() {
@@ -352,7 +409,6 @@ describe('Activity Suspense', () => {
     });
   });
 
-  // @gate enableActivity
   test('updates at multiple priorities that suspend inside hidden tree', async () => {
     let setText;
     let setStep;
@@ -409,7 +465,6 @@ describe('Activity Suspense', () => {
     expect(root).toMatchRenderedOutput(<span hidden={true}>B1</span>);
   });
 
-  // @gate enableActivity
   test('detect updates to a hidden tree during a concurrent event', async () => {
     // This is a pretty complex test case. It relates to how we detect if an
     // update is made to a hidden tree: when scheduling the update, we walk up

@@ -50,6 +50,7 @@ let ReactServerDOMClient;
 let ReactDOMClient;
 let useActionState;
 let act;
+let assertConsoleErrorDev;
 
 describe('ReactFlightDOMForm', () => {
   beforeEach(() => {
@@ -72,6 +73,8 @@ describe('ReactFlightDOMForm', () => {
     ReactDOMServer = require('react-dom/server.edge');
     ReactDOMClient = require('react-dom/client');
     act = React.act;
+    assertConsoleErrorDev =
+      require('internal-test-utils').assertConsoleErrorDev;
 
     // TODO: Test the old api but it warns so needs warnings to be asserted.
     // if (__VARIANT__) {
@@ -118,17 +121,7 @@ describe('ReactFlightDOMForm', () => {
       const method = (submitter && submitter.formMethod) || form.method;
       const encType = (submitter && submitter.formEnctype) || form.enctype;
       if (method === 'post' && encType === 'multipart/form-data') {
-        let formData;
-        if (submitter) {
-          const temp = document.createElement('input');
-          temp.name = submitter.name;
-          temp.value = submitter.value;
-          submitter.parentNode.insertBefore(temp, submitter);
-          formData = new FormData(form);
-          temp.parentNode.removeChild(temp);
-        } else {
-          formData = new FormData(form);
-        }
+        const formData = new FormData(form, submitter);
         return POST(formData);
       }
       throw new Error('Navigate to: ' + action);
@@ -361,7 +354,6 @@ describe('ReactFlightDOMForm', () => {
     expect(foo).toBe('barobject');
   });
 
-  // @gate enableAsyncActions
   it("useActionState's dispatch binds the initial state to the provided action", async () => {
     const serverAction = serverExports(
       async function action(prevState, formData) {
@@ -409,7 +401,6 @@ describe('ReactFlightDOMForm', () => {
     expect(await returnValue).toEqual({count: 6});
   });
 
-  // @gate enableAsyncActions
   it('useActionState can reuse state during MPA form submission', async () => {
     const serverAction = serverExports(
       async function action(prevState, formData) {
@@ -498,7 +489,6 @@ describe('ReactFlightDOMForm', () => {
     }
   });
 
-  // @gate enableAsyncActions
   it(
     'useActionState preserves state if arity is the same, but different ' +
       'arguments are bound (i.e. inline closure)',
@@ -617,7 +607,6 @@ describe('ReactFlightDOMForm', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it('useActionState does not reuse state if action signatures are different', async () => {
     // This is the same as the previous test, except instead of using bind to
     // configure the server action (i.e. a closure), it swaps the action.
@@ -704,7 +693,6 @@ describe('ReactFlightDOMForm', () => {
     expect(container.textContent).toBe('111');
   });
 
-  // @gate enableAsyncActions
   it('when permalink is provided, useActionState compares that instead of the keypath', async () => {
     const serverAction = serverExports(
       async function action(prevState, formData) {
@@ -810,7 +798,6 @@ describe('ReactFlightDOMForm', () => {
     expect(container.textContent).toBe('1');
   });
 
-  // @gate enableAsyncActions
   it('useActionState can change the action URL with the `permalink` argument', async () => {
     const serverAction = serverExports(function action(prevState) {
       return {state: prevState.count + 1};
@@ -855,7 +842,6 @@ describe('ReactFlightDOMForm', () => {
     expect(form.action).toBe('http://localhost/permalink');
   });
 
-  // @gate enableAsyncActions
   it('useActionState `permalink` is coerced to string', async () => {
     const serverAction = serverExports(function action(prevState) {
       return {state: prevState.count + 1};
@@ -908,7 +894,6 @@ describe('ReactFlightDOMForm', () => {
     expect(form.action).toBe('http://localhost/permalink');
   });
 
-  // @gate enableAsyncActions
   it('useActionState can return JSX state during MPA form submission', async () => {
     const serverAction = serverExports(
       async function action(prevState, formData) {
@@ -967,12 +952,14 @@ describe('ReactFlightDOMForm', () => {
       await readIntoContainer(postbackSsrStream);
     }
 
-    await expect(submitTheForm).toErrorDev(
+    await submitTheForm();
+    assertConsoleErrorDev([
       'Failed to serialize an action for progressive enhancement:\n' +
         'Error: React Element cannot be passed to Server Functions from the Client without a temporary reference set. Pass a TemporaryReferenceSet to the options.\n' +
         '  [<div/>]\n' +
-        '   ^^^^^^',
-    );
+        '   ^^^^^^' +
+        '\n    in <stack>',
+    ]);
 
     // The error message was returned as JSX.
     const form2 = container.getElementsByTagName('form')[0];
@@ -980,7 +967,6 @@ describe('ReactFlightDOMForm', () => {
     expect(form2.firstChild.tagName).toBe('DIV');
   });
 
-  // @gate enableAsyncActions && enableBinaryFlight
   it('useActionState can return binary state during MPA form submission', async () => {
     const serverAction = serverExports(
       async function action(prevState, formData) {
@@ -1044,10 +1030,12 @@ describe('ReactFlightDOMForm', () => {
       await readIntoContainer(postbackSsrStream);
     }
 
-    await expect(submitTheForm).toErrorDev(
+    await submitTheForm();
+    assertConsoleErrorDev([
       'Failed to serialize an action for progressive enhancement:\n' +
-        'Error: File/Blob fields are not yet supported in progressive forms. Will fallback to client hydration.',
-    );
+        'Error: File/Blob fields are not yet supported in progressive forms. Will fallback to client hydration.' +
+        '\n    in <stack>',
+    ]);
 
     expect(blob instanceof Blob).toBe(true);
     expect(blob.size).toBe(2);

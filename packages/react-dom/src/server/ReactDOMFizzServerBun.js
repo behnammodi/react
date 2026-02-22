@@ -13,7 +13,7 @@ import type {
   HeadersDescriptor,
 } from 'react-dom-bindings/src/server/ReactFizzConfigDOM';
 import type {ImportMap} from '../shared/ReactDOMTypes';
-import type {ErrorInfo, PostponeInfo} from 'react-server/src/ReactFizzServer';
+import type {ErrorInfo} from 'react-server/src/ReactFizzServer';
 
 import ReactVersion from 'shared/ReactVersion';
 
@@ -37,14 +37,18 @@ ensureCorrectIsomorphicReactVersion();
 type Options = {
   identifierPrefix?: string,
   namespaceURI?: string,
-  nonce?: string,
+  nonce?:
+    | string
+    | {
+        script?: string,
+        style?: string,
+      },
   bootstrapScriptContent?: string,
   bootstrapScripts?: Array<string | BootstrapScriptDescriptor>,
   bootstrapModules?: Array<string | BootstrapScriptDescriptor>,
   progressiveChunkSize?: number,
   signal?: AbortSignal,
   onError?: (error: mixed, errorInfo: ErrorInfo) => ?string,
-  onPostpone?: (reason: string, postponeInfo: PostponeInfo) => void,
   unstable_externalRuntimeSrc?: string | BootstrapScriptDescriptor,
   importMap?: ImportMap,
   formState?: ReactFormState<any, any> | null,
@@ -130,7 +134,6 @@ function renderToReadableStream(
       onShellReady,
       onShellError,
       onFatalError,
-      options ? options.onPostpone : undefined,
       options ? options.formState : undefined,
     );
     if (options && options.signal) {

@@ -16,12 +16,15 @@ import type {
 } from 'shared/ReactTypes';
 
 import isArray from 'shared/isArray';
+import noop from 'shared/noop';
 import {
   getIteratorFn,
   REACT_ELEMENT_TYPE,
   REACT_LAZY_TYPE,
   REACT_PORTAL_TYPE,
+  REACT_OPTIMISTIC_KEY,
 } from 'shared/ReactSymbols';
+import {enableOptimisticKey} from 'shared/ReactFeatureFlags';
 import {checkKeyStringCoercion} from 'shared/CheckStringCoercion';
 
 import {isValidElement, cloneAndReplaceKey} from './jsx/ReactJSXElement';
@@ -72,6 +75,13 @@ function getElementKey(element: any, index: number): string {
   // Do some typechecking here since we call this blindly. We want to ensure
   // that we don't block potential future ES APIs.
   if (typeof element === 'object' && element !== null && element.key != null) {
+    if (enableOptimisticKey && element.key === REACT_OPTIMISTIC_KEY) {
+      // For React.Children purposes this is treated as just null.
+      if (__DEV__) {
+        console.error("React.Children helpers don't support optimisticKey.");
+      }
+      return index.toString(36);
+    }
     // Explicit key
     if (__DEV__) {
       checkKeyStringCoercion(element.key);
@@ -81,8 +91,6 @@ function getElementKey(element: any, index: number): string {
   // Implicit key determined by the index in the set
   return index.toString(36);
 }
-
-function noop() {}
 
 function resolveThenable<T>(thenable: Thenable<T>): T {
   switch (thenable.status) {

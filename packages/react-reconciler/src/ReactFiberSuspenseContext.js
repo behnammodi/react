@@ -7,10 +7,10 @@
  * @flow
  */
 
+import type {SuspenseProps} from 'shared/ReactTypes';
 import type {Fiber} from './ReactInternalTypes';
 import type {StackCursor} from './ReactFiberStack';
-import type {SuspenseProps, SuspenseState} from './ReactFiberSuspenseComponent';
-import type {OffscreenState} from './ReactFiberActivityComponent';
+import type {SuspenseState} from './ReactFiberSuspenseComponent';
 
 import {enableSuspenseAvoidThisFallback} from 'shared/ReactFeatureFlags';
 import {createCursor, push, pop} from './ReactFiberStack';
@@ -48,9 +48,10 @@ export function pushPrimaryTreeSuspenseHandler(handler: Fiber): void {
   // Shallow Suspense context fields, like ForceSuspenseFallback, should only be
   // propagated a single level. For example, when ForceSuspenseFallback is set,
   // it should only force the nearest Suspense boundary into fallback mode.
-  pushSuspenseListContext(
-    handler,
+  push(
+    suspenseStackCursor,
     setDefaultShallowSuspenseListContext(suspenseStackCursor.current),
+    handler,
   );
 
   // Experimental feature: Some Suspense boundaries are marked as having an
@@ -106,27 +107,33 @@ export function pushFallbackTreeSuspenseHandler(fiber: Fiber): void {
   reuseSuspenseHandlerOnStack(fiber);
 }
 
+export function pushDehydratedActivitySuspenseHandler(fiber: Fiber): void {
+  // This is called when hydrating an Activity boundary. We can just leave it
+  // dehydrated if it suspends.
+  // A SuspenseList context is only pushed here to avoid a push/pop mismatch.
+  // Reuse the current value on the stack.
+  // TODO: We can avoid needing to push here by by forking popSuspenseHandler
+  // into separate functions for Activity, Suspense and Offscreen.
+  push(suspenseStackCursor, suspenseStackCursor.current, fiber);
+  push(suspenseHandlerStackCursor, fiber, fiber);
+  if (shellBoundary === null) {
+    // We can contain any suspense inside the Activity boundary.
+    shellBoundary = fiber;
+  }
+}
+
 export function pushOffscreenSuspenseHandler(fiber: Fiber): void {
   if (fiber.tag === OffscreenComponent) {
     // A SuspenseList context is only pushed here to avoid a push/pop mismatch.
     // Reuse the current value on the stack.
     // TODO: We can avoid needing to push here by by forking popSuspenseHandler
-    // into separate functions for Suspense and Offscreen.
-    pushSuspenseListContext(fiber, suspenseStackCursor.current);
+    // into separate functions for Activity, Suspense and Offscreen.
+    push(suspenseStackCursor, suspenseStackCursor.current, fiber);
     push(suspenseHandlerStackCursor, fiber, fiber);
-    if (shellBoundary !== null) {
-      // A parent boundary is showing a fallback, so we've already rendered
-      // deeper than the shell.
-    } else {
-      const current = fiber.alternate;
-      if (current !== null) {
-        const prevState: OffscreenState = current.memoizedState;
-        if (prevState !== null) {
-          // This is the first boundary in the stack that's already showing
-          // a fallback. So everything outside is considered the shell.
-          shellBoundary = fiber;
-        }
-      }
+    if (shellBoundary === null) {
+      // We're rendering hidden content. If it suspends, we can handle it by
+      // just not committing the offscreen boundary.
+      shellBoundary = fiber;
     }
   } else {
     // This is a LegacyHidden component.
@@ -135,7 +142,7 @@ export function pushOffscreenSuspenseHandler(fiber: Fiber): void {
 }
 
 export function reuseSuspenseHandlerOnStack(fiber: Fiber) {
-  pushSuspenseListContext(fiber, suspenseStackCursor.current);
+  push(suspenseStackCursor, suspenseStackCursor.current, fiber);
   push(suspenseHandlerStackCursor, getSuspenseHandler(), fiber);
 }
 
@@ -149,7 +156,7 @@ export function popSuspenseHandler(fiber: Fiber): void {
     // Popping back into the shell.
     shellBoundary = null;
   }
-  popSuspenseListContext(fiber);
+  pop(suspenseStackCursor, fiber);
 }
 
 // SuspenseList context
@@ -195,9 +202,32 @@ export function pushSuspenseListContext(
   fiber: Fiber,
   newContext: SuspenseContext,
 ): void {
+  // Push the current handler in this case since we're not catching at the SuspenseList
+  // for typical rows.
+  const handlerOnStack = suspenseHandlerStackCursor.current;
+  push(suspenseHandlerStackCursor, handlerOnStack, fiber);
   push(suspenseStackCursor, newContext, fiber);
+}
+
+export function pushSuspenseListCatch(
+  fiber: Fiber,
+  newContext: SuspenseContext,
+): void {
+  // In this case we do want to handle catching suspending on the actual boundary itself.
+  // This is used for rows that are allowed to be hidden anyway.
+  push(suspenseHandlerStackCursor, fiber, fiber);
+  push(suspenseStackCursor, newContext, fiber);
+  if (shellBoundary === null) {
+    // We can contain the effects to hiding the current row.
+    shellBoundary = fiber;
+  }
 }
 
 export function popSuspenseListContext(fiber: Fiber): void {
   pop(suspenseStackCursor, fiber);
+  pop(suspenseHandlerStackCursor, fiber);
+  if (shellBoundary === fiber) {
+    // Popping back into the shell.
+    shellBoundary = null;
+  }
 }

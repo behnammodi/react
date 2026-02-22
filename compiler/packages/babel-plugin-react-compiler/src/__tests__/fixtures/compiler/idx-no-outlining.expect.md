@@ -2,7 +2,7 @@
 ## Input
 
 ```javascript
-// @customMacros(idx)
+// @customMacros:"idx"
 import idx from 'idx';
 
 function Component(props) {
@@ -21,7 +21,7 @@ export const FIXTURE_ENTRYPOINT = {
 ## Code
 
 ```javascript
-import { c as _c } from "react/compiler-runtime"; // @customMacros(idx)
+import { c as _c } from "react/compiler-runtime"; // @customMacros:"idx"
 
 function Component(props) {
   var _ref2;
@@ -29,7 +29,6 @@ function Component(props) {
   let t0;
   if ($[0] !== props) {
     var _ref;
-
     t0 =
       (_ref = props) != null
         ? (_ref = _ref.group) != null

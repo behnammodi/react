@@ -2,8 +2,7 @@
 ## Input
 
 ```javascript
-// @debug
-function component(a, b) {
+function useHook(a, b) {
   let z = {a};
   let y = b;
   let x = function () {
@@ -22,8 +21,8 @@ function component(a, b) {
 ## Code
 
 ```javascript
-import { c as _c } from "react/compiler-runtime"; // @debug
-function component(a, b) {
+import { c as _c } from "react/compiler-runtime";
+function useHook(a, b) {
   const $ = _c(5);
   let t0;
   if ($[0] !== a) {
@@ -49,6 +48,7 @@ function component(a, b) {
     t1 = $[4];
   }
   const x = t1;
+
   return x;
 }
 

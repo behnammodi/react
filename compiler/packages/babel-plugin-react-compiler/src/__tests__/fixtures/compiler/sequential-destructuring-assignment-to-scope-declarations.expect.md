@@ -50,7 +50,6 @@ function Component(statusName) {
     const { status, text: t2 } = foo(statusName);
     text = t2;
     const { bg, color } = getStyles(status);
-
     t1 = identity(bg);
     t0 = identity(color);
     $[0] = statusName;
@@ -97,7 +96,7 @@ function foo(name) {
   const t0 = `${name}!`;
   let t1;
   if ($[0] !== t0) {
-    t1 = { status: `<status>`, text: t0 };
+    t1 = { status: "<status>", text: t0 };
     $[0] = t0;
     $[1] = t1;
   } else {

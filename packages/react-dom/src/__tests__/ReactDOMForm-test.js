@@ -14,8 +14,8 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 // Our current version of JSDOM doesn't implement the event dispatching
 // so we polyfill it.
 const NativeFormData = global.FormData;
-const FormDataPolyfill = function FormData(form) {
-  const formData = new NativeFormData(form);
+const FormDataPolyfill = function FormData(form, submitter) {
+  const formData = new NativeFormData(form, submitter);
   const formDataEvent = new Event('formdata', {
     bubbles: true,
     cancelable: false,
@@ -361,7 +361,7 @@ describe('ReactDOMForm', () => {
     expect(actionCalled).toBe(false);
   });
 
-  it('should only submit the inner of nested forms', async () => {
+  it('should submit the inner of nested forms', async () => {
     const ref = React.createRef();
     let data;
 
@@ -373,35 +373,33 @@ describe('ReactDOMForm', () => {
     }
 
     const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(async () => {
-        // This isn't valid HTML but just in case.
-        root.render(
-          <form action={outerAction}>
-            <input type="text" name="data" defaultValue="outer" />
-            <form action={innerAction} ref={ref}>
-              <input type="text" name="data" defaultValue="inner" />
-            </form>
-          </form>,
-        );
-      });
-    }).toErrorDev(
+    await act(async () => {
+      // This isn't valid HTML but just in case.
+      root.render(
+        <form action={outerAction}>
+          <input type="text" name="data" defaultValue="outer" />
+          <form action={innerAction} ref={ref}>
+            <input type="text" name="data" defaultValue="inner" />
+          </form>
+        </form>,
+      );
+    });
+    assertConsoleErrorDev([
       'In HTML, <form> cannot be a descendant of <form>.\n' +
         'This will cause a hydration error.\n' +
         '\n' +
         '> <form action={function outerAction}>\n' +
         '    <input>\n' +
         '>   <form action={function innerAction} ref={{current:null}}>\n' +
-        '\n    in form (at **)' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '\n    in form (at **)'),
-    );
+        '\n    in form (at **)',
+    ]);
 
     await submit(ref.current);
 
     expect(data).toBe('innerinner');
   });
 
-  it('should only submit once if one root is nested inside the other', async () => {
+  it('should submit once if one root is nested inside the other', async () => {
     const ref = React.createRef();
     let outerCalled = 0;
     let innerCalled = 0;
@@ -444,7 +442,7 @@ describe('ReactDOMForm', () => {
     expect(innerCalled).toBe(1);
   });
 
-  it('should only submit once if a portal is nested inside its own root', async () => {
+  it('should submit once if a portal is nested inside its own root', async () => {
     const ref = React.createRef();
     let outerCalled = 0;
     let innerCalled = 0;
@@ -491,11 +489,16 @@ describe('ReactDOMForm', () => {
     const inputRef = React.createRef();
     const buttonRef = React.createRef();
     const outsideButtonRef = React.createRef();
+    const imageButtonRef = React.createRef();
     let button;
+    let buttonX;
+    let buttonY;
     let title;
 
     function action(formData) {
       button = formData.get('button');
+      buttonX = formData.get('button.x');
+      buttonY = formData.get('button.y');
       title = formData.get('title');
     }
 
@@ -510,6 +513,12 @@ describe('ReactDOMForm', () => {
             <button name="button" value="edit" ref={buttonRef}>
               Edit
             </button>
+            <input
+              type="image"
+              name="button"
+              href="/some/image.png"
+              ref={imageButtonRef}
+            />
           </form>
           <form id="form" action={action}>
             <input type="text" name="title" defaultValue="hello" />
@@ -548,9 +557,12 @@ describe('ReactDOMForm', () => {
     expect(button).toBe('outside');
     expect(title).toBe('hello');
 
-    // Ensure that the type field got correctly restored
-    expect(inputRef.current.getAttribute('type')).toBe('submit');
-    expect(buttonRef.current.getAttribute('type')).toBe(null);
+    await submit(imageButtonRef.current);
+
+    expect(button).toBe(null);
+    expect(buttonX).toBe('0');
+    expect(buttonY).toBe('0');
+    expect(title).toBe('hello');
   });
 
   it('excludes the submitter name when the submitter is a function action', async () => {
@@ -565,29 +577,31 @@ describe('ReactDOMForm', () => {
     }
 
     const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(async () => {
-        root.render(
-          <form>
-            <input
-              type="submit"
-              name="button"
-              value="delete"
-              ref={inputRef}
-              formAction={action}
-            />
-            <button
-              name="button"
-              value="edit"
-              ref={buttonRef}
-              formAction={action}>
-              Edit
-            </button>
-          </form>,
-        );
-      });
-    }).toErrorDev([
-      'Cannot specify a "name" prop for a button that specifies a function as a formAction.',
+    await act(async () => {
+      root.render(
+        <form>
+          <input
+            type="submit"
+            name="button"
+            value="delete"
+            ref={inputRef}
+            formAction={action}
+          />
+          <button
+            name="button"
+            value="edit"
+            ref={buttonRef}
+            formAction={action}>
+            Edit
+          </button>
+        </form>,
+      );
+    });
+    assertConsoleErrorDev([
+      'Cannot specify a "name" prop for a button that specifies a function as a formAction. ' +
+        'React needs it to encode which action should be invoked. ' +
+        'It will get overridden.\n' +
+        '    in input (at **)',
     ]);
 
     await submit(inputRef.current);
@@ -669,7 +683,6 @@ describe('ReactDOMForm', () => {
     expect(actionCalled).toBe(false);
   });
 
-  // @gate enableAsyncActions
   it('form actions are transitions', async () => {
     const formRef = React.createRef();
 
@@ -707,7 +720,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('Updated');
   });
 
-  // @gate enableAsyncActions
   it('multiple form actions', async () => {
     const formRef = React.createRef();
 
@@ -798,12 +810,6 @@ describe('ReactDOMForm', () => {
   });
 
   it('sync errors in form actions can be captured by an error boundary', async () => {
-    if (gate(flags => !flags.enableAsyncActions)) {
-      // TODO: Uncaught JSDOM errors fail the test after the scope has finished
-      // so don't work with the `gate` mechanism.
-      return;
-    }
-
     class ErrorBoundary extends React.Component {
       state = {error: null};
       static getDerivedStateFromError(error) {
@@ -844,12 +850,6 @@ describe('ReactDOMForm', () => {
   });
 
   it('async errors in form actions can be captured by an error boundary', async () => {
-    if (gate(flags => !flags.enableAsyncActions)) {
-      // TODO: Uncaught JSDOM errors fail the test after the scope has finished
-      // so don't work with the `gate` mechanism.
-      return;
-    }
-
     class ErrorBoundary extends React.Component {
       state = {error: null};
       static getDerivedStateFromError(error) {
@@ -895,7 +895,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('Oh no!');
   });
 
-  // @gate enableAsyncActions
   it('useFormStatus reads the status of a pending form action', async () => {
     const formRef = React.createRef();
 
@@ -992,7 +991,6 @@ describe('ReactDOMForm', () => {
     );
   });
 
-  // @gate enableAsyncActions
   it('useActionState updates state asynchronously and queues multiple actions', async () => {
     let actionCounter = 0;
     async function action(state, type) {
@@ -1052,7 +1050,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('2');
   });
 
-  // @gate enableAsyncActions
   it('useActionState supports inline actions', async () => {
     let increment;
     function App({stepSize}) {
@@ -1084,7 +1081,6 @@ describe('ReactDOMForm', () => {
     assertLog(['Pending 1', '11']);
   });
 
-  // @gate enableAsyncActions
   it('useActionState: dispatch throws if called during render', async () => {
     function App() {
       const [state, dispatch, isPending] = useActionState(async () => {}, 0);
@@ -1100,7 +1096,6 @@ describe('ReactDOMForm', () => {
     });
   });
 
-  // @gate enableAsyncActions
   it('useActionState: queues multiple actions and runs them in order', async () => {
     let action;
     function App() {
@@ -1132,7 +1127,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('D');
   });
 
-  // @gate enableAsyncActions
   it(
     'useActionState: when calling a queued action, uses the implementation ' +
       'that was current at the time it was dispatched, not the most recent one',
@@ -1179,7 +1173,6 @@ describe('ReactDOMForm', () => {
     },
   );
 
-  // @gate enableAsyncActions
   it('useActionState: works if action is sync', async () => {
     let increment;
     function App({stepSize}) {
@@ -1211,7 +1204,6 @@ describe('ReactDOMForm', () => {
     assertLog(['Pending 1', '11']);
   });
 
-  // @gate enableAsyncActions
   it('useActionState: can mix sync and async actions', async () => {
     let action;
     function App() {
@@ -1239,7 +1231,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('E');
   });
 
-  // @gate enableAsyncActions
   it('useActionState: error handling (sync action)', async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -1288,7 +1279,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('Caught an error: Oops!');
   });
 
-  // @gate enableAsyncActions
   it('useActionState: error handling (async action)', async () => {
     class ErrorBoundary extends React.Component {
       state = {error: null};
@@ -1394,7 +1384,6 @@ describe('ReactDOMForm', () => {
     expect(container.textContent).toBe('Caught an error: Oops!');
   });
 
-  // @gate enableAsyncActions
   it('useActionState works in StrictMode', async () => {
     let actionCounter = 0;
     async function action(state, type) {
@@ -1462,8 +1451,8 @@ describe('ReactDOMForm', () => {
     assertLog([
       'Suspend! [Count: 0]',
       'Loading...',
-
-      ...(gate('enableSiblingPrerendering') ? ['Suspend! [Count: 0]'] : []),
+      // pre-warming
+      'Suspend! [Count: 0]',
     ]);
     await act(() => resolveText('Count: 0'));
     assertLog(['Count: 0']);
@@ -1473,8 +1462,8 @@ describe('ReactDOMForm', () => {
     assertLog([
       'Suspend! [Count: 1]',
       'Loading...',
-
-      ...(gate('enableSiblingPrerendering') ? ['Suspend! [Count: 1]'] : []),
+      // pre-warming
+      'Suspend! [Count: 1]',
     ]);
     expect(container.textContent).toBe('Loading...');
 
@@ -1507,8 +1496,8 @@ describe('ReactDOMForm', () => {
     await act(() => root.render(<App />));
     assertLog([
       'Suspend! [Count: 0]',
-
-      ...(gate('enableSiblingPrerendering') ? ['Suspend! [Count: 0]'] : []),
+      // pre-warming
+      'Suspend! [Count: 0]',
     ]);
     await act(() => resolveText('Count: 0'));
     assertLog(['Count: 0']);
@@ -1516,16 +1505,15 @@ describe('ReactDOMForm', () => {
     // Dispatch outside of a transition.
     await act(() => dispatch());
     assertConsoleErrorDev([
-      [
-        'An async function was passed to useActionState, but it was ' +
-          'dispatched outside of an action context',
-        {withoutStack: true},
-      ],
+      'An async function with useActionState was called outside of a transition. ' +
+        'This is likely not what you intended (for example, isPending will not update ' +
+        'correctly). Either call the returned function inside startTransition, or pass it ' +
+        'to an `action` or `formAction` prop.',
     ]);
     assertLog([
       'Suspend! [Count: 1]',
-
-      ...(gate('enableSiblingPrerendering') ? ['Suspend! [Count: 1]'] : []),
+      // pre-warming
+      'Suspend! [Count: 1]',
     ]);
     expect(container.textContent).toBe('Count: 0');
   });
@@ -1606,6 +1594,57 @@ describe('ReactDOMForm', () => {
     // The form was reset to the new value from the server.
     expect(inputRef.current.value).toBe('acdlite');
     expect(divRef.current.textContent).toEqual('Current username: acdlite');
+  });
+
+  it('should fire onReset on automatic form reset', async () => {
+    const formRef = React.createRef();
+    const inputRef = React.createRef();
+
+    let setValue;
+    const defaultValue = 0;
+    function App({promiseForUsername}) {
+      const [value, _setValue] = useState(defaultValue);
+      setValue = _setValue;
+
+      return (
+        <form
+          ref={formRef}
+          action={async formData => {
+            Scheduler.log(`Async action started`);
+            await getText('Wait');
+          }}
+          onReset={() => {
+            setValue(defaultValue);
+          }}>
+          <input
+            ref={inputRef}
+            text="text"
+            name="amount"
+            value={value}
+            onChange={event => setValue(event.currentTarget.value)}
+          />
+        </form>
+      );
+    }
+
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<App />));
+
+    // Dirty the controlled input
+    await act(() => setValue('3'));
+    expect(inputRef.current.value).toEqual('3');
+
+    // Submit the form. This will trigger an async action.
+    await submit(formRef.current);
+    assertLog(['Async action started']);
+
+    // We haven't reset yet.
+    expect(inputRef.current.value).toEqual('3');
+
+    // Action completes. onReset has been fired and values reset manually.
+    await act(() => resolveText('Wait'));
+    assertLog([]);
+    expect(inputRef.current.value).toEqual('0');
   });
 
   it('requestFormReset schedules a form reset after transition completes', async () => {
@@ -1691,6 +1730,37 @@ describe('ReactDOMForm', () => {
     // The form was reset to the new value from the server.
     expect(inputRef.current.value).toBe('acdlite');
     expect(divRef.current.textContent).toEqual('Current username: acdlite');
+  });
+
+  it('parallel form submissions do not throw', async () => {
+    const formRef = React.createRef();
+    let resolve = null;
+    function App() {
+      async function submitForm() {
+        Scheduler.log('Action');
+        if (!resolve) {
+          await new Promise(res => {
+            resolve = res;
+          });
+        }
+      }
+      return <form ref={formRef} action={submitForm} />;
+    }
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<App />));
+
+    // Start first form submission
+    await act(async () => {
+      formRef.current.requestSubmit();
+    });
+    assertLog(['Action']);
+
+    // Submit form again while first form action is still pending
+    await act(async () => {
+      formRef.current.requestSubmit();
+      resolve(); // Resolve the promise to allow the first form action to complete
+    });
+    assertLog(['Action']);
   });
 
   it(
@@ -1944,11 +2014,11 @@ describe('ReactDOMForm', () => {
     expect(inputRef.current.value).toBe('  Updated  ');
 
     // This triggers a synchronous requestFormReset, and a warning
-    await expect(async () => {
-      await act(() => resolveText('Wait 1'));
-    }).toErrorDev(['requestFormReset was called outside a transition'], {
-      withoutStack: true,
-    });
+    await act(() => resolveText('Wait 1'));
+    assertConsoleErrorDev([
+      'requestFormReset was called outside a transition or action. ' +
+        'To fix, move to an action, or wrap with startTransition.',
+    ]);
     assertLog(['Request form reset']);
 
     // The form was reset even though the action didn't finish.
@@ -1982,7 +2052,13 @@ describe('ReactDOMForm', () => {
 
     // Symbols are coerced to null, so this should fire the form action
     await act(() => root.render(<App submitterAction={Symbol()} />));
-    assertConsoleErrorDev(['Invalid value for prop `formAction`']);
+    assertConsoleErrorDev([
+      'Invalid value for prop `formAction` on <button> tag. ' +
+        'Either remove it from the element, or pass a string or number value to keep it in the DOM. ' +
+        'For details, see https://react.dev/link/attribute-behavior \n' +
+        '    in button (at **)\n' +
+        '    in App (at **)',
+    ]);
     await submit(buttonRef.current);
     assertLog(['Form action']);
 
@@ -2226,7 +2302,13 @@ describe('ReactDOMForm', () => {
 
     // Symbols are coerced to null
     await act(() => root.render(<Form action={Symbol()} />));
-    assertConsoleErrorDev(['Invalid value for prop `action`']);
+    assertConsoleErrorDev([
+      'Invalid value for prop `action` on <form> tag. ' +
+        'Either remove it from the element, or pass a string or number value to keep it in the DOM. ' +
+        'For details, see https://react.dev/link/attribute-behavior \n' +
+        '    in form (at **)\n' +
+        '    in Form (at **)',
+    ]);
     await submit(formRef.current);
     assertLog([null]);
 
@@ -2246,14 +2328,80 @@ describe('ReactDOMForm', () => {
     await submit(formRef.current);
     assertLog([actionFn]);
 
-    // Everything else is toString-ed
+    // Everything else is toString-ed, unless trusted types are enabled.
     class MyAction {
       toString() {
         return 'stringified action';
       }
     }
-    await act(() => root.render(<Form action={new MyAction()} />));
+    const instance = new MyAction();
+
+    await act(() => root.render(<Form action={instance} />));
     await submit(formRef.current);
-    assertLog(['stringified action']);
+    assertLog(
+      gate('enableTrustedTypesIntegration')
+        ? [instance]
+        : ['stringified action'],
+    );
+  });
+
+  it('form actions should retain status when nested state changes', async () => {
+    const formRef = React.createRef();
+
+    let rerenderUnrelatedStatus;
+    function UnrelatedStatus() {
+      const {pending} = useFormStatus();
+      const [counter, setCounter] = useState(0);
+      rerenderUnrelatedStatus = () => setCounter(n => n + 1);
+      Scheduler.log(`[unrelated form] pending: ${pending}, state: ${counter}`);
+    }
+
+    let rerenderTargetStatus;
+    function TargetStatus() {
+      const {pending} = useFormStatus();
+      const [counter, setCounter] = useState(0);
+      Scheduler.log(`[target form] pending: ${pending}, state: ${counter}`);
+      rerenderTargetStatus = () => setCounter(n => n + 1);
+    }
+
+    function App() {
+      async function action() {
+        return new Promise(resolve => {
+          // never resolves
+        });
+      }
+
+      return (
+        <>
+          <form action={action} ref={formRef}>
+            <input type="submit" />
+            <TargetStatus />
+          </form>
+          <form>
+            <UnrelatedStatus />
+          </form>
+        </>
+      );
+    }
+
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<App />));
+
+    assertLog([
+      '[target form] pending: false, state: 0',
+      '[unrelated form] pending: false, state: 0',
+    ]);
+
+    await submit(formRef.current);
+
+    assertLog(['[target form] pending: true, state: 0']);
+
+    await act(() => rerenderTargetStatus());
+
+    assertLog(['[target form] pending: true, state: 1']);
+
+    await act(() => rerenderUnrelatedStatus());
+
+    assertLog(['[unrelated form] pending: false, state: 1']);
   });
 });

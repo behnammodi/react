@@ -15,6 +15,7 @@ let findDOMNode;
 let act;
 let Scheduler;
 let assertLog;
+let assertConsoleErrorDev;
 
 // Copy of ReactUpdates using ReactDOM.render and ReactDOM.unstable_batchedUpdates.
 // Can be deleted when we remove both.
@@ -27,6 +28,8 @@ describe('ReactLegacyUpdates', () => {
       ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
         .findDOMNode;
     act = require('internal-test-utils').act;
+    assertConsoleErrorDev =
+      require('internal-test-utils').assertConsoleErrorDev;
     Scheduler = require('scheduler');
 
     const InternalTestUtils = require('internal-test-utils');
@@ -906,36 +909,32 @@ describe('ReactLegacyUpdates', () => {
     let component = ReactDOM.render(<A />, container);
 
     await expect(async () => {
-      await expect(async () => {
-        await act(() => {
-          component.setState({}, 'no');
-        });
-      }).rejects.toThrowError(
-        'Invalid argument passed as callback. Expected a function. Instead ' +
-          'received: no',
-      );
-    }).toErrorDev(
+      await act(() => {
+        component.setState({}, 'no');
+      });
+    }).rejects.toThrowError(
+      'Invalid argument passed as callback. Expected a function. ' +
+        'Instead received: no',
+    );
+    assertConsoleErrorDev([
       'Expected the last optional `callback` argument to be ' +
         'a function. Instead received: no.',
-      {withoutStack: 1},
-    );
+    ]);
 
     container = document.createElement('div');
     component = ReactDOM.render(<A />, container);
     await expect(async () => {
-      await expect(async () => {
-        await act(() => {
-          component.setState({}, {foo: 'bar'});
-        });
-      }).rejects.toThrowError(
-        'Invalid argument passed as callback. Expected a function. Instead ' +
-          'received: [object Object]',
-      );
-    }).toErrorDev(
-      'Expected the last optional `callback` argument to be ' +
-        "a function. Instead received: { foo: 'bar' }.",
-      {withoutStack: 1},
+      await act(() => {
+        component.setState({}, {foo: 'bar'});
+      });
+    }).rejects.toThrowError(
+      'Invalid argument passed as callback. Expected a function. Instead ' +
+        'received: [object Object]',
     );
+    assertConsoleErrorDev([
+      'Expected the last optional `callback` argument to be a function. ' +
+        "Instead received: { foo: 'bar' }.",
+    ]);
     // Make sure the warning is deduplicated and doesn't fire again
     container = document.createElement('div');
     component = ReactDOM.render(<A />, container);
@@ -968,35 +967,31 @@ describe('ReactLegacyUpdates', () => {
     let component = ReactDOM.render(<A />, container);
 
     await expect(async () => {
-      await expect(async () => {
-        await act(() => {
-          component.forceUpdate('no');
-        });
-      }).rejects.toThrowError(
-        'Invalid argument passed as callback. Expected a function. Instead ' +
-          'received: no',
-      );
-    }).toErrorDev(
-      'Expected the last optional `callback` argument to be ' +
-        'a function. Instead received: no.',
-      {withoutStack: 1},
+      await act(() => {
+        component.forceUpdate('no');
+      });
+    }).rejects.toThrowError(
+      'Invalid argument passed as callback. Expected a function. Instead ' +
+        'received: no',
     );
+    assertConsoleErrorDev([
+      'Expected the last optional `callback` argument to be a function. ' +
+        'Instead received: no.',
+    ]);
     container = document.createElement('div');
     component = ReactDOM.render(<A />, container);
     await expect(async () => {
-      await expect(async () => {
-        await act(() => {
-          component.forceUpdate({foo: 'bar'});
-        });
-      }).rejects.toThrowError(
-        'Invalid argument passed as callback. Expected a function. Instead ' +
-          'received: [object Object]',
-      );
-    }).toErrorDev(
-      'Expected the last optional `callback` argument to be ' +
-        "a function. Instead received: { foo: 'bar' }.",
-      {withoutStack: 1},
+      await act(() => {
+        component.forceUpdate({foo: 'bar'});
+      });
+    }).rejects.toThrowError(
+      'Invalid argument passed as callback. Expected a function. Instead ' +
+        'received: [object Object]',
     );
+    assertConsoleErrorDev([
+      'Expected the last optional `callback` argument to be a function. ' +
+        "Instead received: { foo: 'bar' }.",
+    ]);
     // Make sure the warning is deduplicated and doesn't fire again
     container = document.createElement('div');
     component = ReactDOM.render(<A />, container);
@@ -1318,9 +1313,12 @@ describe('ReactLegacyUpdates', () => {
     }
 
     const container = document.createElement('div');
-    expect(() => ReactDOM.render(<Foo />, container)).toErrorDev(
-      'Cannot update during an existing state transition',
-    );
+    ReactDOM.render(<Foo />, container);
+    assertConsoleErrorDev([
+      'Cannot update during an existing state transition (such as within `render`). ' +
+        'Render methods should be a pure function of props and state.\n' +
+        '    in Foo (at **)',
+    ]);
     expect(ops).toEqual(['base: 0, memoized: 0', 'base: 1, memoized: 1']);
   });
 

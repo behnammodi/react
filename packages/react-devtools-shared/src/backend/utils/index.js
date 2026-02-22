@@ -12,7 +12,6 @@ import {compareVersions} from 'compare-versions';
 import {dehydrate} from 'react-devtools-shared/src/hydration';
 import isArray from 'shared/isArray';
 
-import type {Source} from 'react-devtools-shared/src/shared/types';
 import type {DehydratedData} from 'react-devtools-shared/src/frontend/types';
 
 export {default as formatWithStyles} from './formatWithStyles';
@@ -167,6 +166,19 @@ export function serializeToString(data: any): string {
   );
 }
 
+function safeToString(val: any): string {
+  try {
+    return String(val);
+  } catch (err) {
+    if (typeof val === 'object') {
+      // An object with no prototype and no `[Symbol.toPrimitive]()`, `toString()`, and `valueOf()` methods would throw.
+      // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String#string_coercion
+      return '[object Object]';
+    }
+    throw err;
+  }
+}
+
 // based on https://github.com/tmpfs/format-util/blob/0e62d430efb0a1c51448709abd3e2406c14d8401/format.js#L1
 // based on https://developer.mozilla.org/en-US/docs/Web/API/console#Using_string_substitutions
 // Implements s, d, i and f placeholders
@@ -176,7 +188,7 @@ export function formatConsoleArgumentsToSingleString(
 ): string {
   const args = inputArgs.slice();
 
-  let formatted: string = String(maybeMessage);
+  let formatted: string = safeToString(maybeMessage);
 
   // If the first argument is a string, check for substitutions.
   if (typeof maybeMessage === 'string') {
@@ -211,7 +223,7 @@ export function formatConsoleArgumentsToSingleString(
   // Arguments that remain after formatting.
   if (args.length) {
     for (let i = 0; i < args.length; i++) {
-      formatted += ' ' + String(args[i]);
+      formatted += ' ' + safeToString(args[i]);
     }
   }
 
@@ -242,95 +254,6 @@ export const isReactNativeEnvironment = (): boolean => {
   // We should probably define the client for DevTools on the backend side and share it with the frontend
   return window.document == null;
 };
-
-function extractLocation(
-  url: string,
-): null | {sourceURL: string, line?: string, column?: string} {
-  if (url.indexOf(':') === -1) {
-    return null;
-  }
-
-  // remove any parentheses from start and end
-  const withoutParentheses = url.replace(/^\(+/, '').replace(/\)+$/, '');
-  const locationParts = /(at )?(.+?)(?::(\d+))?(?::(\d+))?$/.exec(
-    withoutParentheses,
-  );
-
-  if (locationParts == null) {
-    return null;
-  }
-
-  const [, , sourceURL, line, column] = locationParts;
-  return {sourceURL, line, column};
-}
-
-const CHROME_STACK_REGEXP = /^\s*at .*(\S+:\d+|\(native\))/m;
-function parseSourceFromChromeStack(stack: string): Source | null {
-  const frames = stack.split('\n');
-  // eslint-disable-next-line no-for-of-loops/no-for-of-loops
-  for (const frame of frames) {
-    const sanitizedFrame = frame.trim();
-
-    const locationInParenthesesMatch = sanitizedFrame.match(/ (\(.+\)$)/);
-    const possibleLocation = locationInParenthesesMatch
-      ? locationInParenthesesMatch[1]
-      : sanitizedFrame;
-
-    const location = extractLocation(possibleLocation);
-    // Continue the search until at least sourceURL is found
-    if (location == null) {
-      continue;
-    }
-
-    const {sourceURL, line = '1', column = '1'} = location;
-
-    return {
-      sourceURL,
-      line: parseInt(line, 10),
-      column: parseInt(column, 10),
-    };
-  }
-
-  return null;
-}
-
-function parseSourceFromFirefoxStack(stack: string): Source | null {
-  const frames = stack.split('\n');
-  // eslint-disable-next-line no-for-of-loops/no-for-of-loops
-  for (const frame of frames) {
-    const sanitizedFrame = frame.trim();
-    const frameWithoutFunctionName = sanitizedFrame.replace(
-      /((.*".+"[^@]*)?[^@]*)(?:@)/,
-      '',
-    );
-
-    const location = extractLocation(frameWithoutFunctionName);
-    // Continue the search until at least sourceURL is found
-    if (location == null) {
-      continue;
-    }
-
-    const {sourceURL, line = '1', column = '1'} = location;
-
-    return {
-      sourceURL,
-      line: parseInt(line, 10),
-      column: parseInt(column, 10),
-    };
-  }
-
-  return null;
-}
-
-export function parseSourceFromComponentStack(
-  componentStack: string,
-): Source | null {
-  if (componentStack.match(CHROME_STACK_REGEXP)) {
-    return parseSourceFromChromeStack(componentStack);
-  }
-
-  return parseSourceFromFirefoxStack(componentStack);
-}
 
 // 0.123456789 => 0.123
 // Expects high-resolution timestamp in milliseconds, like from performance.now()

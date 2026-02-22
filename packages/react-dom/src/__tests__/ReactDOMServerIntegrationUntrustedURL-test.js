@@ -41,6 +41,7 @@ describe('ReactDOMServerIntegration - Untrusted URLs', () => {
   const {
     resetModules,
     itRenders,
+    clientCleanRender,
     clientRenderOnBadMarkup,
     clientRenderOnServerString,
   } = ReactDOMServerIntegrationUtils(initModules);
@@ -141,6 +142,11 @@ describe('ReactDOMServerIntegration - Untrusted URLs', () => {
   });
 
   itRenders('a javascript protocol frame src', async render => {
+    if (render === clientCleanRender || render === clientRenderOnServerString) {
+      // React does not hydrate framesets properly because the default hydration scope
+      // is the body
+      return;
+    }
     const e = await render(
       <html>
         <head />
@@ -204,6 +210,11 @@ describe('ReactDOMServerIntegration - Untrusted URLs', () => {
       // Checking for string coercion problems results in double the
       // toString calls in DEV
       expectedToStringCalls *= 2;
+    }
+
+    if (gate('enableTrustedTypesIntegration') && render === clientCleanRender) {
+      // Trusted types does another toString.
+      expectedToStringCalls += 1;
     }
 
     let toStringCalls = 0;

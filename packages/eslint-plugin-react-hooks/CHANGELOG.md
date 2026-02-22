@@ -1,3 +1,54 @@
+## 7.0.1
+
+- Disallowed passing inline `useEffectEvent` values as JSX props to guard against accidental propagation. ([#34820](https://github.com/facebook/react/pull/34820) by [@jf-eirinha](https://github.com/jf-eirinha))
+- Switch to `export =` so eslint-plugin-react-hooks emits correct types for consumers in Node16 ESM projects. ([#34949](https://github.com/facebook/react/pull/34949) by [@karlhorky](https://github.com/karlhorky))
+- Tightened the typing of `configs.flat` so the `configs` export is always defined. ([#34950](https://github.com/facebook/react/pull/34950) by [@poteto](https://github.com/poteto))
+- Fix named import runtime errors. ([#34951](https://github.com/facebook/react/pull/34951), [#34953](https://github.com/facebook/react/pull/34953) by [@karlhorky](https://github.com/karlhorky))
+
+## 7.0.0
+
+This release slims down presets to just 2 configurations (`recommended` and `recommended-latest`), and all compiler rules are enabled by default.
+
+- **Breaking:** Removed `recommended-latest-legacy` and `flat/recommended` configs. The plugin now provides `recommended` (legacy and flat configs with all recommended rules),  and `recommended-latest` (legacy and flat configs with all recommended rules plus new bleeding edge experimental compiler rules). ([@poteto](https://github.com/poteto) in [#34757](https://github.com/facebook/react/pull/34757))
+
+## 6.1.1
+
+**Note:** 6.1.0 accidentally allowed use of `recommended` without flat config, causing errors when used with ESLint v9's `defineConfig()` helper. This has been fixed in 6.1.1.
+
+- Fix `recommended` config for flat config compatibility. The `recommended` config has been converted to flat config format. Non-flat config users should use `recommended-legacy` instead. ([@poteto](https://github.com/poteto) in [#34700](https://github.com/facebook/react/pull/34700))
+- Add `recommended-latest` and `recommended-latest-legacy` configs that include React Compiler rules. ([@poteto](https://github.com/poteto) in [#34675](https://github.com/facebook/react/pull/34675))
+- Remove unused `NoUnusedOptOutDirectives` rule. ([@poteto](https://github.com/poteto) in [#34703](https://github.com/facebook/react/pull/34703))
+- Remove `hermes-parser` and dependency. ([@poteto](https://github.com/poteto) in [#34719](https://github.com/facebook/react/pull/34719))
+- Remove `@babel/plugin-proposal-private-methods` dependency. ([@ArnaudBarre](https://github.com/ArnaudBarre) and [@josephsavona](https://github.com/josephsavona) in [#34715](https://github.com/facebook/react/pull/34715))
+- Update for Zod v3/v4 compatibility. ([@kolian](https://github.com/kolvian) and [@josephsavona](https://github.com/josephsavona) in [#34717](https://github.com/facebook/react/pull/34717))
+
+## 6.1.0
+
+**Note:** Version 6.0.0 was mistakenly released and immediately deprecated and untagged on npm. This is the first official 6.x major release and includes breaking changes.
+
+- **Breaking:** Require Node.js 18 or newer. ([@michaelfaith](https://github.com/michaelfaith) in [#32458](https://github.com/facebook/react/pull/32458))
+- **Breaking:** Flat config is now the default `recommended` preset. Legacy config moved to `recommended-legacy`. ([@michaelfaith](https://github.com/michaelfaith) in [#32457](https://github.com/facebook/react/pull/32457))
+- **New Violations:** Disallow calling `use` within try/catch blocks. ([@poteto](https://github.com/poteto) in [#34040](https://github.com/facebook/react/pull/34040))
+- **New Violations:** Disallow calling `useEffectEvent` functions in arbitrary closures. ([@jbrown215](https://github.com/jbrown215) in [#33544](https://github.com/facebook/react/pull/33544))
+- Handle `React.useEffect` in addition to `useEffect` in rules-of-hooks. ([@Ayc0](https://github.com/Ayc0) in [#34076](https://github.com/facebook/react/pull/34076))
+- Added `react-hooks` settings config option that to accept `additionalEffectHooks` that are used across exhaustive-deps and rules-of-hooks rules. ([@jbrown215](https://github.com/jbrown215)) in [#34497](https://github.com/facebook/react/pull/34497)
+
+## 6.0.0
+
+Accidentally released. See 6.1.0 for the actual changes.
+
+## 5.2.0
+
+- Support flat config ([@michaelfaith](https://github.com/michaelfaith) in [#30774](https://github.com/facebook/react/pull/30774))
+- Convert the plugin to TypeScript and provide package type declarations ([@michaelfaith](https://github.com/michaelfaith) in [#32279](https://github.com/facebook/react/pull/32279), [#32283](https://github.com/facebook/react/pull/32283), [#32240](https://github.com/facebook/react/pull/32240), [#32400](https://github.com/facebook/react/pull/32400) and [@poteto](https://github.com/poteto) in [#32420](https://github.com/facebook/react/pull/32420))
+- Fix false positive error in components with `do`/`while` loops ([@tyxla](https://github.com/tyxla) in [#31720](https://github.com/facebook/react/pull/31720))
+- Detect issues in class properties ([@mjesun](https://github.com/mjesun) & [@ecraig12345](https://github.com/ecraig12345) in [#31823](https://github.com/facebook/react/pull/31823))
+
+## 5.1.0
+
+- Add support for `do`/`while` loops ([@tyxla](https://github.com/tyxla) in [#28714](https://github.com/facebook/react/pull/28714))
+- Fix error when callback argument is an identifier with an `as` expression ([@mskelton](https://github.com/mskelton) in [#31119](https://github.com/facebook/react/pull/31119))
+
 ## 5.0.0
 
 * **New Violations:** Component names now need to start with an uppercase letter instead of a non-lowercase letter. This means `_Button` or `_component` are no longer valid. ([@kassens](https://github.com/kassens)) in [#25162](https://github.com/facebook/react/pull/25162)

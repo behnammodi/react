@@ -26,7 +26,7 @@ import {
 import {localStorageSetItem} from 'react-devtools-shared/src/storage';
 
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
-import type {Source} from 'react-devtools-shared/src/shared/types';
+import type {ReactFunctionLocation, ReactCallSite} from 'shared/ReactTypes';
 
 export type StatusTypes = 'server-connected' | 'devtools-connected' | 'error';
 export type StatusListener = (message: string, status: StatusTypes) => void;
@@ -144,29 +144,27 @@ async function fetchFileWithCaching(url: string) {
 }
 
 function canViewElementSourceFunction(
-  _source: Source,
-  symbolicatedSource: Source | null,
+  _source: ReactFunctionLocation | ReactCallSite,
+  symbolicatedSource: ReactFunctionLocation | ReactCallSite | null,
 ): boolean {
   if (symbolicatedSource == null) {
     return false;
   }
+  const [, sourceURL, ,] = symbolicatedSource;
 
-  return doesFilePathExist(symbolicatedSource.sourceURL, projectRoots);
+  return doesFilePathExist(sourceURL, projectRoots);
 }
 
 function viewElementSourceFunction(
-  _source: Source,
-  symbolicatedSource: Source | null,
+  _source: ReactFunctionLocation | ReactCallSite,
+  symbolicatedSource: ReactFunctionLocation | ReactCallSite | null,
 ): void {
   if (symbolicatedSource == null) {
     return;
   }
 
-  launchEditor(
-    symbolicatedSource.sourceURL,
-    symbolicatedSource.line,
-    projectRoots,
-  );
+  const [, sourceURL, line] = symbolicatedSource;
+  launchEditor(sourceURL, line, projectRoots);
 }
 
 function onDisconnected() {
@@ -358,17 +356,12 @@ function startServer(
     // because they are generally stored in localStorage within the context of the extension.
     // Because of this it relies on the extension to pass filters, so include them wth the response here.
     // This will ensure that saved filters are shared across different web pages.
-    const savedPreferencesString = `
-      window.__REACT_DEVTOOLS_COMPONENT_FILTERS__ = ${JSON.stringify(
-        getSavedComponentFilters(),
-      )};`;
+    const componentFiltersString = JSON.stringify(getSavedComponentFilters());
 
     response.end(
-      savedPreferencesString +
+      backendFile.toString() +
         '\n;' +
-        backendFile.toString() +
-        '\n;' +
-        'ReactDevToolsBackend.initialize();' +
+        `ReactDevToolsBackend.initialize(undefined, undefined, undefined, ${componentFiltersString});` +
         '\n' +
         `ReactDevToolsBackend.connectToDevTools({port: ${port}, host: '${host}', useHttps: ${
           useHttps ? 'true' : 'false'

@@ -1,4 +1,11 @@
-import {CompilerError} from '..';
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import {CompilerError, SourceLocation} from '..';
 import {assertNonNull} from './CollectHoistablePropertyLoads';
 import {
   BlockId,
@@ -16,6 +23,7 @@ import {
   DependencyPathEntry,
   Instruction,
   Terminal,
+  PropertyLiteral,
 } from './HIR';
 import {printIdentifier} from './PrintHIR';
 
@@ -157,10 +165,11 @@ function matchOptionalTestBlock(
   blocks: ReadonlyMap<BlockId, BasicBlock>,
 ): {
   consequentId: IdentifierId;
-  property: string;
+  property: PropertyLiteral;
   propertyId: IdentifierId;
   storeLocalInstr: Instruction;
   consequentGoto: BlockId;
+  propertyLoadLoc: SourceLocation;
 } | null {
   const consequentBlock = assertNonNull(blocks.get(terminal.consequent));
   if (
@@ -213,6 +222,7 @@ function matchOptionalTestBlock(
       propertyId: propertyLoad.lvalue.identifier.id,
       storeLocalInstr,
       consequentGoto: consequentBlock.terminal.block,
+      propertyLoadLoc: propertyLoad.loc,
     };
   }
   return null;
@@ -267,7 +277,11 @@ function traverseOptionalBlock(
         instrVal.kind === 'PropertyLoad' &&
         instrVal.object.identifier.id === prevInstr.lvalue.identifier.id
       ) {
-        path.push({property: instrVal.property, optional: false});
+        path.push({
+          property: instrVal.property,
+          optional: false,
+          loc: instrVal.loc,
+        });
       } else {
         return null;
       }
@@ -282,7 +296,9 @@ function traverseOptionalBlock(
     );
     baseObject = {
       identifier: maybeTest.instructions[0].value.place.identifier,
+      reactive: maybeTest.instructions[0].value.place.reactive,
       path,
+      loc: maybeTest.instructions[0].value.place.loc,
     };
     test = maybeTest.terminal;
   } else if (maybeTest.terminal.kind === 'optional') {
@@ -381,15 +397,18 @@ function traverseOptionalBlock(
       loc: optional.terminal.loc,
     },
   );
-  const load = {
+  const load: ReactiveScopeDependency = {
     identifier: baseObject.identifier,
+    reactive: baseObject.reactive,
     path: [
       ...baseObject.path,
       {
         property: matchConsequentResult.property,
         optional: optional.terminal.optional,
+        loc: matchConsequentResult.propertyLoadLoc,
       },
     ],
+    loc: matchConsequentResult.propertyLoadLoc,
   };
   context.processedInstrsInOptional.add(matchConsequentResult.storeLocalInstr);
   context.processedInstrsInOptional.add(test);

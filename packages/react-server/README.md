@@ -43,7 +43,6 @@ function render(
     clientManifest,
     options ? options.onError : undefined,
     options ? options.identifierPrefix : undefined,
-    options ? options.onPostpone : undefined,
     options ? options.temporaryReferences : undefined,
     __DEV__ && options ? options.environmentName : undefined,
     __DEV__ && options ? options.filterStackFrame : undefined,
@@ -214,7 +213,6 @@ function prerender(
       onFatalError,
       options ? options.onError : undefined,
       options ? options.identifierPrefix : undefined,
-      options ? options.onPostpone : undefined,
       options ? options.temporaryReferences : undefined,
       __DEV__ && options ? options.environmentName : undefined,
       __DEV__ && options ? options.filterStackFrame : undefined,
@@ -248,7 +246,7 @@ a destination is whatever the implementation wants to use for storing the output
 
 ### `stopFlowing(request: Request): void`
 
-If you need to pause or permanently end the writing of any additional serialized output for this request you can call `stopFlowing(request)`. You may start flowing again after you've stopped. This is how you would implement backpressure support for streams for instance. It's important to note that stopping flowing is not going to stop rendering it simply causes the request to buffer any serialized chunks until they are requested again with `startFlowing()`.
+If you need to pause or permanently end the writing of any additional serialized output for this request you can call `stopFlowing(request)`. You may start flowing again after you've stopped. This is how you would implement backpressure support for streams for instance. It's important to note that stopping flowing is not going to stop rendering. If you want rendering to stop you must `abort` the request.
 
 ### `abort(request: Request): void`
 

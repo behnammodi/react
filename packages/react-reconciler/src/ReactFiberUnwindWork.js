@@ -10,7 +10,11 @@
 import type {ReactContext} from 'shared/ReactTypes';
 import type {Fiber, FiberRoot} from './ReactInternalTypes';
 import type {Lanes} from './ReactFiberLane';
-import type {SuspenseState} from './ReactFiberSuspenseComponent';
+import type {ActivityState} from './ReactFiberActivityComponent';
+import type {
+  SuspenseState,
+  SuspenseListRenderState,
+} from './ReactFiberSuspenseComponent';
 import type {Cache} from './ReactFiberCacheComponent';
 import type {TracingMarkerInstance} from './ReactFiberTracingMarkerComponent';
 
@@ -22,6 +26,7 @@ import {
   HostSingleton,
   HostPortal,
   ContextProvider,
+  ActivityComponent,
   SuspenseComponent,
   SuspenseListComponent,
   OffscreenComponent,
@@ -29,13 +34,11 @@ import {
   CacheComponent,
   TracingMarkerComponent,
 } from './ReactWorkTags';
-import {DidCapture, NoFlags, ShouldCapture} from './ReactFiberFlags';
+import {DidCapture, NoFlags, ShouldCapture, Update} from './ReactFiberFlags';
 import {NoMode, ProfileMode} from './ReactTypeOfMode';
 import {
   enableProfilerTimer,
-  enableCache,
   enableTransitionTracing,
-  enableRenderableContext,
 } from 'shared/ReactFeatureFlags';
 
 import {popHostContainer, popHostContext} from './ReactFiberHostContext';
@@ -49,7 +52,7 @@ import {
   isContextProvider as isLegacyContextProvider,
   popContext as popLegacyContext,
   popTopLevelContextObject as popTopLevelLegacyContextObject,
-} from './ReactFiberContext';
+} from './ReactFiberLegacyContext';
 import {popProvider} from './ReactFiberNewContext';
 import {popCacheProvider} from './ReactFiberCacheComponent';
 import {transferActualDuration} from './ReactProfilerTimer';
@@ -91,10 +94,8 @@ function unwindWork(
     }
     case HostRoot: {
       const root: FiberRoot = workInProgress.stateNode;
-      if (enableCache) {
-        const cache: Cache = workInProgress.memoizedState.cache;
-        popCacheProvider(workInProgress, cache);
-      }
+      const cache: Cache = workInProgress.memoizedState.cache;
+      popCacheProvider(workInProgress, cache);
 
       if (enableTransitionTracing) {
         popRootMarkerInstance(workInProgress);
@@ -121,6 +122,35 @@ function unwindWork(
     case HostComponent: {
       // TODO: popHydrationState
       popHostContext(workInProgress);
+      return null;
+    }
+    case ActivityComponent: {
+      const activityState: null | ActivityState = workInProgress.memoizedState;
+      if (activityState !== null) {
+        popSuspenseHandler(workInProgress);
+
+        if (workInProgress.alternate === null) {
+          throw new Error(
+            'Threw in newly mounted dehydrated component. This is likely a bug in ' +
+              'React. Please file an issue.',
+          );
+        }
+
+        resetHydrationState();
+      }
+
+      const flags = workInProgress.flags;
+      if (flags & ShouldCapture) {
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+        // Captured a suspense effect. Re-render the boundary.
+        if (
+          enableProfilerTimer &&
+          (workInProgress.mode & ProfileMode) !== NoMode
+        ) {
+          transferActualDuration(workInProgress);
+        }
+        return workInProgress;
+      }
       return null;
     }
     case SuspenseComponent: {
@@ -153,20 +183,34 @@ function unwindWork(
     }
     case SuspenseListComponent: {
       popSuspenseListContext(workInProgress);
-      // SuspenseList doesn't actually catch anything. It should've been
+      // SuspenseList doesn't normally catch anything. It should've been
       // caught by a nested boundary. If not, it should bubble through.
+      const flags = workInProgress.flags;
+      if (flags & ShouldCapture) {
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+        // If we caught something on the SuspenseList itself it's because
+        // we want to ignore something. Re-enter the cycle and handle it
+        // in the complete phase.
+        const renderState: null | SuspenseListRenderState =
+          workInProgress.memoizedState;
+        if (renderState !== null) {
+          // Cut off any remaining tail work and don't commit the rendering one.
+          // This assumes that we have already confirmed that none of these are
+          // already mounted.
+          renderState.rendering = null;
+          renderState.tail = null;
+        }
+        // Schedule the commit phase to attach retry listeners.
+        workInProgress.flags |= Update;
+        return workInProgress;
+      }
       return null;
     }
     case HostPortal:
       popHostContainer(workInProgress);
       return null;
     case ContextProvider:
-      let context: ReactContext<any>;
-      if (enableRenderableContext) {
-        context = workInProgress.type;
-      } else {
-        context = workInProgress.type._context;
-      }
+      const context: ReactContext<any> = workInProgress.type;
       popProvider(context, workInProgress);
       return null;
     case OffscreenComponent:
@@ -189,10 +233,8 @@ function unwindWork(
       return null;
     }
     case CacheComponent:
-      if (enableCache) {
-        const cache: Cache = workInProgress.memoizedState.cache;
-        popCacheProvider(workInProgress, cache);
-      }
+      const cache: Cache = workInProgress.memoizedState.cache;
+      popCacheProvider(workInProgress, cache);
       return null;
     case TracingMarkerComponent:
       if (enableTransitionTracing) {
@@ -226,10 +268,8 @@ function unwindInterruptedWork(
     }
     case HostRoot: {
       const root: FiberRoot = interruptedWork.stateNode;
-      if (enableCache) {
-        const cache: Cache = interruptedWork.memoizedState.cache;
-        popCacheProvider(interruptedWork, cache);
-      }
+      const cache: Cache = interruptedWork.memoizedState.cache;
+      popCacheProvider(interruptedWork, cache);
 
       if (enableTransitionTracing) {
         popRootMarkerInstance(interruptedWork);
@@ -249,6 +289,12 @@ function unwindInterruptedWork(
     case HostPortal:
       popHostContainer(interruptedWork);
       break;
+    case ActivityComponent: {
+      if (interruptedWork.memoizedState !== null) {
+        popSuspenseHandler(interruptedWork);
+      }
+      break;
+    }
     case SuspenseComponent:
       popSuspenseHandler(interruptedWork);
       break;
@@ -256,12 +302,7 @@ function unwindInterruptedWork(
       popSuspenseListContext(interruptedWork);
       break;
     case ContextProvider:
-      let context: ReactContext<any>;
-      if (enableRenderableContext) {
-        context = interruptedWork.type;
-      } else {
-        context = interruptedWork.type._context;
-      }
+      const context: ReactContext<any> = interruptedWork.type;
       popProvider(context, interruptedWork);
       break;
     case OffscreenComponent:
@@ -271,10 +312,8 @@ function unwindInterruptedWork(
       popTransition(interruptedWork, current);
       break;
     case CacheComponent:
-      if (enableCache) {
-        const cache: Cache = interruptedWork.memoizedState.cache;
-        popCacheProvider(interruptedWork, cache);
-      }
+      const cache: Cache = interruptedWork.memoizedState.cache;
+      popCacheProvider(interruptedWork, cache);
       break;
     case TracingMarkerComponent:
       if (enableTransitionTracing) {

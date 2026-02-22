@@ -23,7 +23,7 @@ let React;
 let ReactServerDOMServer;
 let ReactServerDOMClient;
 let ReactServerScheduler;
-let reactServerAct;
+let serverAct;
 
 describe('ReactFlightDOMReply', () => {
   beforeEach(() => {
@@ -31,7 +31,7 @@ describe('ReactFlightDOMReply', () => {
 
     ReactServerScheduler = require('scheduler');
     patchMessageChannel(ReactServerScheduler);
-    reactServerAct = require('internal-test-utils').act;
+    serverAct = require('internal-test-utils').serverAct;
 
     // Simulate the condition resolution
     jest.mock('react', () => require('react/react.react-server'));
@@ -47,17 +47,6 @@ describe('ReactFlightDOMReply', () => {
     __unmockReact();
     ReactServerDOMClient = require('react-server-dom-webpack/client');
   });
-
-  async function serverAct(callback) {
-    let maybePromise;
-    await reactServerAct(() => {
-      maybePromise = callback();
-      if (maybePromise && typeof maybePromise.catch === 'function') {
-        maybePromise.catch(() => {});
-      }
-    });
-    return maybePromise;
-  }
 
   // This method should exist on File but is not implemented in JSDOM
   async function arrayBuffer(file) {
@@ -405,6 +394,74 @@ describe('ReactFlightDOMReply', () => {
     expect(response.children).toBe(children);
   });
 
+  it('can pass JSX as root model through a round trip using temporary references', async () => {
+    const jsx = <div />;
+
+    const temporaryReferences =
+      ReactServerDOMClient.createTemporaryReferenceSet();
+    const body = await ReactServerDOMClient.encodeReply(jsx, {
+      temporaryReferences,
+    });
+
+    const temporaryReferencesServer =
+      ReactServerDOMServer.createTemporaryReferenceSet();
+    const serverPayload = await ReactServerDOMServer.decodeReply(
+      body,
+      webpackServerMap,
+      {temporaryReferences: temporaryReferencesServer},
+    );
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(serverPayload, null, {
+        temporaryReferences: temporaryReferencesServer,
+      }),
+    );
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      stream,
+      {
+        temporaryReferences,
+      },
+    );
+
+    // This should be the same reference that we already saw.
+    await expect(response).toBe(jsx);
+  });
+
+  it('can pass a promise that resolves to JSX through a round trip using temporary references', async () => {
+    const jsx = <div />;
+    const promise = Promise.resolve(jsx);
+
+    const temporaryReferences =
+      ReactServerDOMClient.createTemporaryReferenceSet();
+    const body = await ReactServerDOMClient.encodeReply(
+      {promise},
+      {
+        temporaryReferences,
+      },
+    );
+
+    const temporaryReferencesServer =
+      ReactServerDOMServer.createTemporaryReferenceSet();
+    const serverPayload = await ReactServerDOMServer.decodeReply(
+      body,
+      webpackServerMap,
+      {temporaryReferences: temporaryReferencesServer},
+    );
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(serverPayload, null, {
+        temporaryReferences: temporaryReferencesServer,
+      }),
+    );
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      stream,
+      {
+        temporaryReferences,
+      },
+    );
+
+    // This should resolve to the same reference that we already saw.
+    await expect(response.promise).resolves.toBe(jsx);
+  });
+
   it('can return the same object using temporary references', async () => {
     const obj = {
       this: {is: 'a large object'},
@@ -449,7 +506,50 @@ describe('ReactFlightDOMReply', () => {
     expect(response.obj).toBe(obj);
   });
 
-  // @gate enableFlightReadableStream
+  it('can return an opaque object through an async function', async () => {
+    function fn() {
+      return 'this is a client function';
+    }
+
+    const args = [fn];
+
+    const temporaryReferences =
+      ReactServerDOMClient.createTemporaryReferenceSet();
+    const body = await ReactServerDOMClient.encodeReply(args, {
+      temporaryReferences,
+    });
+
+    const temporaryReferencesServer =
+      ReactServerDOMServer.createTemporaryReferenceSet();
+    const serverPayload = await ReactServerDOMServer.decodeReply(
+      body,
+      webpackServerMap,
+      {temporaryReferences: temporaryReferencesServer},
+    );
+
+    async function action(arg) {
+      return arg;
+    }
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(
+        {
+          result: action.apply(null, serverPayload),
+        },
+        null,
+        {temporaryReferences: temporaryReferencesServer},
+      ),
+    );
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      stream,
+      {
+        temporaryReferences,
+      },
+    );
+
+    expect(await response.result).toBe(fn);
+  });
+
   it('should supports streaming ReadableStream with objects', async () => {
     let controller1;
     let controller2;
@@ -511,7 +611,6 @@ describe('ReactFlightDOMReply', () => {
     });
   });
 
-  // @gate enableFlightReadableStream
   it('should supports streaming AsyncIterables with objects', async () => {
     let resolve;
     const wait = new Promise(r => (resolve = r));
@@ -617,6 +716,17 @@ describe('ReactFlightDOMReply', () => {
     const body = await ReactServerDOMClient.encodeReply({prop: cyclic});
     const root = await ReactServerDOMServer.decodeReply(body, webpackServerMap);
     expect(root.prop.obj).toBe(root.prop);
+  });
+
+  it('can transport cyclic arrays', async () => {
+    const obj = {};
+    const cyclic = [obj];
+    cyclic[1] = cyclic;
+
+    const body = await ReactServerDOMClient.encodeReply({prop: cyclic, obj});
+    const root = await ReactServerDOMServer.decodeReply(body, webpackServerMap);
+    expect(root.prop[1]).toBe(root.prop);
+    expect(root.prop[0]).toBe(root.obj);
   });
 
   it('can abort an unresolved model and get the partial result', async () => {

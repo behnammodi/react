@@ -6,8 +6,9 @@
  */
 
 import {
-  ArrayPattern,
   BlockId,
+  Environment,
+  getHookKind,
   HIRFunction,
   Identifier,
   IdentifierId,
@@ -58,11 +59,24 @@ export function deadCodeElimination(fn: HIRFunction): void {
       }
     }
   }
+
+  /**
+   * Constant propagation and DCE may have deleted or rewritten instructions
+   * that reference context variables.
+   */
+  retainWhere(fn.context, contextVar =>
+    state.isIdOrNameUsed(contextVar.identifier),
+  );
 }
 
 class State {
+  env: Environment;
   named: Set<string> = new Set();
   identifiers: Set<IdentifierId> = new Set();
+
+  constructor(env: Environment) {
+    this.env = env;
+  }
 
   // Mark the identifier as being referenced (not dead code)
   reference(identifier: Identifier): void {
@@ -105,7 +119,7 @@ function findReferencedIdentifiers(fn: HIRFunction): State {
   const hasLoop = hasBackEdge(fn);
   const reversedBlocks = [...fn.body.blocks.values()].reverse();
 
-  const state = new State();
+  const state = new State(fn.env);
   let size = state.count;
   do {
     size = state.count;
@@ -176,29 +190,28 @@ function rewriteInstruction(instr: Instruction, state: State): void {
     switch (instr.value.lvalue.pattern.kind) {
       case 'ArrayPattern': {
         /*
-         * For arrays, we can only eliminate unused items from the end of the array,
-         * so we iterate from the end and break once we find a used item. Note that
-         * we already know at least one item is used, from the pruneableValue check.
+         * For arrays, we can prune items prior to the end by replacing
+         * them with a hole. Items at the end can simply be dropped.
          */
-        let nextItems: ArrayPattern['items'] | null = null;
-        const originalItems = instr.value.lvalue.pattern.items;
-        for (let i = originalItems.length - 1; i >= 0; i--) {
-          const item = originalItems[i];
+        let lastEntryIndex = 0;
+        const items = instr.value.lvalue.pattern.items;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
           if (item.kind === 'Identifier') {
-            if (state.isIdOrNameUsed(item.identifier)) {
-              nextItems = originalItems.slice(0, i + 1);
-              break;
+            if (!state.isIdOrNameUsed(item.identifier)) {
+              items[i] = {kind: 'Hole'};
+            } else {
+              lastEntryIndex = i;
             }
           } else if (item.kind === 'Spread') {
-            if (state.isIdOrNameUsed(item.place.identifier)) {
-              nextItems = originalItems.slice(0, i + 1);
-              break;
+            if (!state.isIdOrNameUsed(item.place.identifier)) {
+              items[i] = {kind: 'Hole'};
+            } else {
+              lastEntryIndex = i;
             }
           }
         }
-        if (nextItems !== null) {
-          instr.value.lvalue.pattern.items = nextItems;
-        }
+        items.length = lastEntryIndex + 1;
         break;
       }
       case 'ObjectPattern': {
@@ -304,12 +317,27 @@ function pruneableValue(value: InstructionValue, state: State): boolean {
       // explicitly retain debugger statements to not break debugging workflows
       return false;
     }
-    case 'Await':
     case 'CallExpression':
+    case 'MethodCall': {
+      if (state.env.outputMode === 'ssr') {
+        const calleee =
+          value.kind === 'CallExpression' ? value.callee : value.property;
+        const hookKind = getHookKind(state.env, calleee.identifier);
+        switch (hookKind) {
+          case 'useState':
+          case 'useReducer':
+          case 'useRef': {
+            // unused refs can be removed
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    case 'Await':
     case 'ComputedDelete':
     case 'ComputedStore':
     case 'PropertyDelete':
-    case 'MethodCall':
     case 'PropertyStore':
     case 'StoreGlobal': {
       /*

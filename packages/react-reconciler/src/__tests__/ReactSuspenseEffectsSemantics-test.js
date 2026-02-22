@@ -283,14 +283,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback create passive',
         'Text:Outside create passive',
         'App create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Inside:Before render',
-              'Suspend:Async',
-              'ClassText:Inside:After render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Inside:Before render',
+        'Suspend:Async',
+        'ClassText:Inside:After render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -687,14 +683,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
         ]);
         await waitForAll([
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? [
-                'Text:Inside:Before render',
-                'Suspend:Async',
-                'Text:Inside:After render',
-              ]
-            : []),
+          // pre-warming
+          'Text:Inside:Before render',
+          'Suspend:Async',
+          'Text:Inside:After render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -850,13 +842,12 @@ describe('ReactSuspenseEffectsSemantics', () => {
           </>,
         );
       });
-      if (gate('enableSiblingPrerendering')) {
-        assertLog([
-          'ClassText:Inside:Before render',
-          'Suspend:Async',
-          'ClassText:Inside:After render',
-        ]);
-      }
+      // pre-warming
+      assertLog([
+        'ClassText:Inside:Before render',
+        'Suspend:Async',
+        'ClassText:Inside:After render',
+      ]);
 
       // Resolving the suspended resource should re-create inner layout effects.
       await act(async () => {
@@ -961,10 +952,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
         ]);
         await waitForAll([
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? ['Suspend:Async', 'Text:Outer render', 'Text:Inner render']
-            : []),
+          // pre-warming
+          'Suspend:Async',
+          'Text:Outer render',
+          'Text:Inner render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -1088,10 +1079,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         ]);
         await waitForAll([
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? ['Suspend:Async', 'Text:Outer render']
-            : []),
+          // pre-warming
+          'Suspend:Async',
+          'Text:Outer render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -1195,10 +1185,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:InnerFallback create insertion',
         'Text:InnerFallback create layout',
         'Text:InnerFallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? ['Text:Inner render', 'Suspend:InnerAsync_1']
-          : []),
+        // pre-warming
+        'Text:Inner render',
+        'Suspend:InnerAsync_1',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1228,16 +1217,12 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:OuterFallback create insertion',
         'Text:OuterFallback create layout',
         'Text:OuterFallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Outer render',
-              'Suspend:OuterAsync_1',
-              'Text:Inner render',
-              'Suspend:InnerAsync_1',
-              'Text:InnerFallback render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Outer render',
+        'Suspend:OuterAsync_1',
+        'Text:Inner render',
+        'Suspend:InnerAsync_1',
+        'Text:InnerFallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1255,15 +1240,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
       assertLog([
         'Text:Outer render',
         'Suspend:OuterAsync_1',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Outer render',
-              'Suspend:OuterAsync_1',
-              'Text:Inner render',
-              'AsyncText:InnerAsync_1 render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Outer render',
+        'Suspend:OuterAsync_1',
+        'Text:Inner render',
+        'AsyncText:InnerAsync_1 render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1288,16 +1269,12 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Outer render',
         'Suspend:OuterAsync_1',
         'Text:OuterFallback render',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Outer render',
-              'Suspend:OuterAsync_1',
-              'Text:Inner render',
-              'Suspend:InnerAsync_2',
-              'Text:InnerFallback render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Outer render',
+        'Suspend:OuterAsync_1',
+        'Text:Inner render',
+        'Suspend:InnerAsync_2',
+        'Text:InnerFallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1325,10 +1302,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:InnerFallback create layout',
         'Text:OuterFallback destroy passive',
         'AsyncText:OuterAsync_1 create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? ['Text:Inner render', 'Suspend:InnerAsync_2']
-          : []),
+        // pre-warming
+        'Text:Inner render',
+        'Suspend:InnerAsync_2',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1382,15 +1358,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:OuterFallback create insertion',
         'Text:OuterFallback create layout',
         'Text:OuterFallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Outer render',
-              'Suspend:OuterAsync_2',
-              'Text:Inner render',
-              'AsyncText:InnerAsync_2 render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Outer render',
+        'Suspend:OuterAsync_2',
+        'Text:Inner render',
+        'AsyncText:InnerAsync_2 render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1425,6 +1397,105 @@ describe('ReactSuspenseEffectsSemantics', () => {
           <span prop="OuterAsync_2" />
           <span prop="Inner" />
           <span prop="InnerAsync_2" />
+        </>,
+      );
+    });
+
+    // @gate enableLegacyCache
+    it('should wait to reveal an inner child when inner one reveals first', async () => {
+      function App({outerChildren, innerChildren}) {
+        return (
+          <Suspense fallback={<Text text="OuterFallback" />} name="Outer">
+            <Suspense fallback={<Text text="InnerFallback" />} name="Inner">
+              <div>{innerChildren}</div>
+            </Suspense>
+            {outerChildren}
+          </Suspense>
+        );
+      }
+
+      // Mount
+      await act(() => {
+        ReactNoop.render(<App />);
+      });
+      assertLog([]);
+      expect(ReactNoop).toMatchRenderedOutput(<div />);
+
+      // Resuspend inner boundary
+      await act(() => {
+        ReactNoop.render(
+          <App
+            outerChildren={null}
+            innerChildren={<AsyncText text="InnerAsync" />}
+          />,
+        );
+      });
+      assertLog([
+        'Suspend:InnerAsync',
+        'Text:InnerFallback render',
+        'Text:InnerFallback create insertion',
+        'Text:InnerFallback create layout',
+        'Text:InnerFallback create passive',
+        'Suspend:InnerAsync',
+      ]);
+      expect(ReactNoop).toMatchRenderedOutput(
+        <>
+          <div hidden={true} />
+          <span prop="InnerFallback" />
+        </>,
+      );
+
+      // Resuspend both boundaries
+      await act(() => {
+        ReactNoop.render(
+          <App
+            outerChildren={<AsyncText text="OuterAsync" />}
+            innerChildren={<AsyncText text="InnerAsync" />}
+          />,
+        );
+      });
+      assertLog([
+        'Suspend:InnerAsync',
+        'Text:InnerFallback render',
+        'Suspend:OuterAsync',
+        'Text:OuterFallback render',
+        'Text:InnerFallback destroy layout',
+        'Text:OuterFallback create insertion',
+        'Text:OuterFallback create layout',
+        'Text:OuterFallback create passive',
+        'Suspend:InnerAsync',
+        'Text:InnerFallback render',
+        'Suspend:OuterAsync',
+      ]);
+      expect(ReactNoop).toMatchRenderedOutput(
+        <>
+          <div hidden={true} />
+          <span prop="InnerFallback" hidden={true} />
+          <span prop="OuterFallback" />
+        </>,
+      );
+
+      // Unsuspend the inner Suspense subtree only
+      // Interestingly, this never commits because the tree is left suspended.
+      // If it did commit, it would potentially cause the div to incorrectly reappear.
+      await act(() => {
+        ReactNoop.render(
+          <App
+            outerChildren={<AsyncText text="OuterAsync" />}
+            innerChildren={null}
+          />,
+        );
+      });
+      assertLog([
+        'Suspend:OuterAsync',
+        'Text:OuterFallback render',
+        'Suspend:OuterAsync',
+      ]);
+      expect(ReactNoop).toMatchRenderedOutput(
+        <>
+          <div hidden={true} />
+          <span prop="InnerFallback" hidden={true} />
+          <span prop="OuterFallback" />
         </>,
       );
     });
@@ -1480,10 +1551,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:InnerFallback create insertion',
         'Text:InnerFallback create layout',
         'Text:InnerFallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? ['Text:Inner render', 'Suspend:InnerAsync_1']
-          : []),
+        // pre-warming
+        'Text:Inner render',
+        'Suspend:InnerAsync_1',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1512,16 +1582,12 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:OuterFallback create insertion',
         'Text:OuterFallback create layout',
         'Text:OuterFallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Outer render',
-              'Suspend:OuterAsync_1',
-              'Text:Inner render',
-              'Suspend:InnerAsync_1',
-              'Text:InnerFallback render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Outer render',
+        'Suspend:OuterAsync_1',
+        'Text:Inner render',
+        'Suspend:InnerAsync_1',
+        'Text:InnerFallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1630,10 +1696,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         await waitForAll([
           'Text:Fallback:Inside create passive',
           'Text:Fallback:Outside create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? ['Text:Inside render', 'Suspend:OutsideAsync']
-            : []),
+          // pre-warming
+          'Text:Inside render',
+          'Suspend:OutsideAsync',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -1667,15 +1732,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         ]);
         await waitForAll([
           'Text:Fallback:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? [
-                'Text:Inside render',
-                'Suspend:OutsideAsync',
-                'Text:Fallback:Inside render',
-                'Suspend:FallbackAsync',
-              ]
-            : []),
+          // pre-warming
+          'Text:Inside render',
+          'Suspend:OutsideAsync',
+          'Text:Fallback:Inside render',
+          'Suspend:FallbackAsync',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -1787,15 +1848,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback:Outside create layout',
         'Text:Fallback:Fallback create passive',
         'Text:Fallback:Outside create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Inside render',
-              'Suspend:OutsideAsync',
-              'Text:Fallback:Inside render',
-              'Suspend:FallbackAsync',
-            ]
-          : []),
+        // pre-warming
+        'Text:Inside render',
+        'Suspend:OutsideAsync',
+        'Text:Fallback:Inside render',
+        'Suspend:FallbackAsync',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -1915,8 +1972,8 @@ describe('ReactSuspenseEffectsSemantics', () => {
         ]);
         await waitForAll([
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering') ? ['Suspend:Suspend'] : []),
+          // pre-warming
+          'Suspend:Suspend',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -2038,10 +2095,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
           'Text:Fallback create insertion',
           'Text:Fallback create layout',
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? ['Suspend:Async', 'ThrowsInDidMount render', 'Text:Inside render']
-            : []),
+          // pre-warming
+          'Suspend:Async',
+          'ThrowsInDidMount render',
+          'Text:Inside render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -2301,14 +2358,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
           'Text:Fallback create insertion',
           'Text:Fallback create layout',
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? [
-                'Suspend:Async',
-                'ThrowsInLayoutEffect render',
-                'Text:Inside render',
-              ]
-            : []),
+          // pre-warming
+          'Suspend:Async',
+          'ThrowsInLayoutEffect render',
+          'Text:Inside render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>
@@ -2555,14 +2608,13 @@ describe('ReactSuspenseEffectsSemantics', () => {
         );
       });
 
-      if (gate('enableSiblingPrerendering')) {
-        assertLog([
-          'Text:Function render',
-          'Suspend:Async_1',
-          'Suspend:Async_2',
-          'ClassText:Class render',
-        ]);
-      }
+      // pre-warming
+      assertLog([
+        'Text:Function render',
+        'Suspend:Async_1',
+        'Suspend:Async_2',
+        'ClassText:Class render',
+      ]);
 
       // Resolving the suspended resource should re-create inner layout effects.
       await act(async () => {
@@ -2572,15 +2624,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Function render',
         'AsyncText:Async_1 render',
         'Suspend:Async_2',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Function render',
-              'AsyncText:Async_1 render',
-              'Suspend:Async_2',
-              'ClassText:Class render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Function render',
+        'AsyncText:Async_1 render',
+        'Suspend:Async_2',
+        'ClassText:Class render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -2715,14 +2763,14 @@ describe('ReactSuspenseEffectsSemantics', () => {
           </>,
         );
       });
-      if (gate('enableSiblingPrerendering')) {
-        assertLog([
-          'Text:Function render',
-          'Suspender "A" render',
-          'Suspend:A',
-          'ClassText:Class render',
-        ]);
-      }
+
+      // pre-warming
+      assertLog([
+        'Text:Function render',
+        'Suspender "A" render',
+        'Suspend:A',
+        'ClassText:Class render',
+      ]);
 
       // Resolving the suspended resource should re-create inner layout effects.
       textToRead = 'B';
@@ -2733,15 +2781,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Function render',
         'Suspender "B" render',
         'Suspend:B',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Text:Function render',
-              'Suspender "B" render',
-              'Suspend:B',
-              'ClassText:Class render',
-            ]
-          : []),
+        // pre-warming
+        'Text:Function render',
+        'Suspender "B" render',
+        'Suspend:B',
+        'ClassText:Class render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -2977,15 +3021,11 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback create insertion',
         'Text:Fallback create layout',
         'Text:Fallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Suspend:Async',
-              'RefCheckerOuter render',
-              'RefCheckerInner:refObject render',
-              'RefCheckerInner:refCallback render',
-            ]
-          : []),
+        // pre-warming
+        'Suspend:Async',
+        'RefCheckerOuter render',
+        'RefCheckerInner:refObject render',
+        'RefCheckerInner:refCallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(
         <>
@@ -3089,17 +3129,13 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback create insertion',
         'Text:Fallback create layout',
         'Text:Fallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Suspend:Async',
-              'RefCheckerOuter render',
-              'ClassComponent:refObject render',
-              'RefCheckerInner:refObject render',
-              'ClassComponent:refCallback render',
-              'RefCheckerInner:refCallback render',
-            ]
-          : []),
+        // pre-warming
+        'Suspend:Async',
+        'RefCheckerOuter render',
+        'ClassComponent:refObject render',
+        'RefCheckerInner:refObject render',
+        'ClassComponent:refCallback render',
+        'RefCheckerInner:refCallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(<span prop="Fallback" />);
 
@@ -3199,17 +3235,13 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback create insertion',
         'Text:Fallback create layout',
         'Text:Fallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? [
-              'Suspend:Async',
-              'RefCheckerOuter render',
-              'FunctionComponent render',
-              'RefCheckerInner:refObject render',
-              'FunctionComponent render',
-              'RefCheckerInner:refCallback render',
-            ]
-          : []),
+        // pre-warming
+        'Suspend:Async',
+        'RefCheckerOuter render',
+        'FunctionComponent render',
+        'RefCheckerInner:refObject render',
+        'FunctionComponent render',
+        'RefCheckerInner:refCallback render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(<span prop="Fallback" />);
 
@@ -3311,10 +3343,9 @@ describe('ReactSuspenseEffectsSemantics', () => {
         'Text:Fallback create insertion',
         'Text:Fallback create layout',
         'Text:Fallback create passive',
-
-        ...(gate('enableSiblingPrerendering')
-          ? ['Suspend:Async', 'RefChecker render']
-          : []),
+        // pre-warming
+        'Suspend:Async',
+        'RefChecker render',
       ]);
       expect(ReactNoop).toMatchRenderedOutput(<span prop="Fallback" />);
 
@@ -3433,14 +3464,10 @@ describe('ReactSuspenseEffectsSemantics', () => {
           'Text:Fallback create insertion',
           'Text:Fallback create layout',
           'Text:Fallback create passive',
-
-          ...(gate('enableSiblingPrerendering')
-            ? [
-                'Suspend:Async',
-                'ThrowsInRefCallback render',
-                'Text:Inside render',
-              ]
-            : []),
+          // pre-warming
+          'Suspend:Async',
+          'ThrowsInRefCallback render',
+          'Text:Inside render',
         ]);
         expect(ReactNoop).toMatchRenderedOutput(
           <>

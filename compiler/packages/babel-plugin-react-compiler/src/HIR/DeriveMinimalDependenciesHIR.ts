@@ -10,10 +10,11 @@ import {
   DependencyPathEntry,
   GeneratedSource,
   Identifier,
+  PropertyLiteral,
   ReactiveScopeDependency,
+  SourceLocation,
 } from '../HIR';
 import {printIdentifier} from '../HIR/PrintHIR';
-import {ReactiveScopePropertyDependency} from '../ReactiveScopes/DeriveMinimalDependencies';
 
 /**
  * Simpler fork of DeriveMinimalDependencies, see PropagateScopeDependenciesHIR
@@ -25,8 +26,9 @@ export class ReactiveScopeDependencyTreeHIR {
    * `identifier.path`, or `identifier?.path` is in this map, it is safe to
    * evaluate (non-optional) PropertyLoads from.
    */
-  #hoistableObjects: Map<Identifier, HoistableNode> = new Map();
-  #deps: Map<Identifier, DependencyNode> = new Map();
+  #hoistableObjects: Map<Identifier, HoistableNode & {reactive: boolean}> =
+    new Map();
+  #deps: Map<Identifier, DependencyNode & {reactive: boolean}> = new Map();
 
   /**
    * @param hoistableObjects a set of paths from which we can safely evaluate
@@ -35,11 +37,13 @@ export class ReactiveScopeDependencyTreeHIR {
    * duplicates when traversing the CFG.
    */
   constructor(hoistableObjects: Iterable<ReactiveScopeDependency>) {
-    for (const {path, identifier} of hoistableObjects) {
+    for (const {path, identifier, reactive, loc} of hoistableObjects) {
       let currNode = ReactiveScopeDependencyTreeHIR.#getOrCreateRoot(
         identifier,
+        reactive,
         this.#hoistableObjects,
         path.length > 0 && path[0].optional ? 'Optional' : 'NonNull',
+        loc,
       );
 
       for (let i = 0; i < path.length; i++) {
@@ -60,6 +64,7 @@ export class ReactiveScopeDependencyTreeHIR {
           nextNode = {
             properties: new Map(),
             accessType,
+            loc: path[i].loc,
           };
           currNode.properties.set(path[i].property, nextNode);
         }
@@ -70,8 +75,10 @@ export class ReactiveScopeDependencyTreeHIR {
 
   static #getOrCreateRoot<T extends string>(
     identifier: Identifier,
-    roots: Map<Identifier, TreeNode<T>>,
+    reactive: boolean,
+    roots: Map<Identifier, TreeNode<T> & {reactive: boolean}>,
     defaultAccessType: T,
+    loc: SourceLocation,
   ): TreeNode<T> {
     // roots can always be accessed unconditionally in JS
     let rootNode = roots.get(identifier);
@@ -79,9 +86,17 @@ export class ReactiveScopeDependencyTreeHIR {
     if (rootNode === undefined) {
       rootNode = {
         properties: new Map(),
+        reactive,
         accessType: defaultAccessType,
+        loc,
       };
       roots.set(identifier, rootNode);
+    } else {
+      CompilerError.invariant(reactive === rootNode.reactive, {
+        reason: '[DeriveMinimalDependenciesHIR] Conflicting reactive root flag',
+        description: `Identifier ${printIdentifier(identifier)}`,
+        loc: GeneratedSource,
+      });
     }
     return rootNode;
   }
@@ -91,12 +106,14 @@ export class ReactiveScopeDependencyTreeHIR {
    * dependency. This effectively truncates @param dep to its maximal
    * safe-to-evaluate subpath
    */
-  addDependency(dep: ReactiveScopePropertyDependency): void {
-    const {identifier, path} = dep;
+  addDependency(dep: ReactiveScopeDependency): void {
+    const {identifier, reactive, path, loc} = dep;
     let depCursor = ReactiveScopeDependencyTreeHIR.#getOrCreateRoot(
       identifier,
+      reactive,
       this.#deps,
       PropertyAccessType.UnconditionalAccess,
+      loc,
     );
     /**
      * hoistableCursor is null if depCursor is not an object we can hoist
@@ -142,6 +159,7 @@ export class ReactiveScopeDependencyTreeHIR {
           depCursor,
           entry.property,
           accessType,
+          entry.loc,
         );
       } else if (
         hoistableCursor != null &&
@@ -152,6 +170,7 @@ export class ReactiveScopeDependencyTreeHIR {
           depCursor,
           entry.property,
           PropertyAccessType.UnconditionalAccess,
+          entry.loc,
         );
       } else {
         /**
@@ -172,7 +191,13 @@ export class ReactiveScopeDependencyTreeHIR {
   deriveMinimalDependencies(): Set<ReactiveScopeDependency> {
     const results = new Set<ReactiveScopeDependency>();
     for (const [rootId, rootNode] of this.#deps.entries()) {
-      collectMinimalDependenciesInSubtree(rootNode, rootId, [], results);
+      collectMinimalDependenciesInSubtree(
+        rootNode,
+        rootNode.reactive,
+        rootId,
+        [],
+        results,
+      );
     }
 
     return results;
@@ -287,38 +312,39 @@ function merge(
 }
 
 type TreeNode<T extends string> = {
-  properties: Map<string, TreeNode<T>>;
+  properties: Map<PropertyLiteral, TreeNode<T>>;
   accessType: T;
+  loc: SourceLocation;
 };
 type HoistableNode = TreeNode<'Optional' | 'NonNull'>;
 type DependencyNode = TreeNode<PropertyAccessType>;
 
 /**
- * TODO: this is directly pasted from DeriveMinimalDependencies. Since we no
- * longer have conditionally accessed nodes, we can simplify
- *
  * Recursively calculates minimal dependencies in a subtree.
  * @param node DependencyNode representing a dependency subtree.
  * @returns a minimal list of dependencies in this subtree.
  */
 function collectMinimalDependenciesInSubtree(
   node: DependencyNode,
+  reactive: boolean,
   rootIdentifier: Identifier,
   path: Array<DependencyPathEntry>,
   results: Set<ReactiveScopeDependency>,
 ): void {
   if (isDependency(node.accessType)) {
-    results.add({identifier: rootIdentifier, path});
+    results.add({identifier: rootIdentifier, reactive, path, loc: node.loc});
   } else {
     for (const [childName, childNode] of node.properties) {
       collectMinimalDependenciesInSubtree(
         childNode,
+        reactive,
         rootIdentifier,
         [
           ...path,
           {
             property: childName,
             optional: isOptional(childNode.accessType),
+            loc: childNode.loc,
           },
         ],
         results,
@@ -344,14 +370,16 @@ function printSubtree(
 
 function makeOrMergeProperty(
   node: DependencyNode,
-  property: string,
+  property: PropertyLiteral,
   accessType: PropertyAccessType,
+  loc: SourceLocation,
 ): DependencyNode {
   let child = node.properties.get(property);
   if (child == null) {
     child = {
       properties: new Map(),
       accessType,
+      loc,
     };
     node.properties.set(property, child);
   } else {

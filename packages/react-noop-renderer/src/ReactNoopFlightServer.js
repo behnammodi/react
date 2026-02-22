@@ -70,8 +70,10 @@ type Options = {
   environmentName?: string | (() => string),
   filterStackFrame?: (url: string, functionName: string) => boolean,
   identifierPrefix?: string,
+  signal?: AbortSignal,
+  debugChannel?: {onMessage?: (message: string) => void},
   onError?: (error: mixed) => void,
-  onPostpone?: (reason: string) => void,
+  startTime?: number,
 };
 
 function render(model: ReactClientValue, options?: Options): Destination {
@@ -82,11 +84,29 @@ function render(model: ReactClientValue, options?: Options): Destination {
     bundlerConfig,
     options ? options.onError : undefined,
     options ? options.identifierPrefix : undefined,
-    options ? options.onPostpone : undefined,
     undefined,
+    options ? options.startTime : undefined,
     __DEV__ && options ? options.environmentName : undefined,
     __DEV__ && options ? options.filterStackFrame : undefined,
+    __DEV__ && options && options.debugChannel !== undefined,
   );
+  const signal = options ? options.signal : undefined;
+  if (signal) {
+    if (signal.aborted) {
+      ReactNoopFlightServer.abort(request, (signal: any).reason);
+    } else {
+      const listener = () => {
+        ReactNoopFlightServer.abort(request, (signal: any).reason);
+        signal.removeEventListener('abort', listener);
+      };
+      signal.addEventListener('abort', listener);
+    }
+  }
+  if (__DEV__ && options && options.debugChannel !== undefined) {
+    options.debugChannel.onMessage = message => {
+      ReactNoopFlightServer.resolveDebugMessage(request, message);
+    };
+  }
   ReactNoopFlightServer.startWork(request);
   ReactNoopFlightServer.startFlowing(request, destination);
   return destination;

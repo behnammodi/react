@@ -12,6 +12,8 @@
 // Polyfills for test environment
 global.ReadableStream =
   require('web-streams-polyfill/ponyfill/es6').ReadableStream;
+global.WritableStream =
+  require('web-streams-polyfill/ponyfill/es6').WritableStream;
 global.TextEncoder = require('util').TextEncoder;
 global.TextDecoder = require('util').TextDecoder;
 
@@ -24,6 +26,8 @@ let serverExports;
 let webpackMap;
 let webpackServerMap;
 let act;
+let serverAct;
+let getDebugInfo;
 let React;
 let ReactDOM;
 let ReactDOMClient;
@@ -35,9 +39,8 @@ let Suspense;
 let use;
 let ReactServer;
 let ReactServerDOM;
-let Scheduler;
 let ReactServerScheduler;
-let reactServerAct;
+let assertConsoleErrorDev;
 
 describe('ReactFlightDOMBrowser', () => {
   beforeEach(() => {
@@ -45,7 +48,11 @@ describe('ReactFlightDOMBrowser', () => {
 
     ReactServerScheduler = require('scheduler');
     patchMessageChannel(ReactServerScheduler);
-    reactServerAct = require('internal-test-utils').act;
+    serverAct = require('internal-test-utils').serverAct;
+    getDebugInfo = require('internal-test-utils').getDebugInfo.bind(null, {
+      ignoreProps: true,
+      useFixedTime: true,
+    });
 
     // Simulate the condition resolution
 
@@ -62,20 +69,17 @@ describe('ReactFlightDOMBrowser', () => {
     webpackMap = WebpackMock.webpackMap;
     webpackServerMap = WebpackMock.webpackServerMap;
     ReactServerDOMServer = require('react-server-dom-webpack/server');
-    if (__EXPERIMENTAL__) {
-      jest.mock('react-server-dom-webpack/static', () =>
-        require('react-server-dom-webpack/static.browser'),
-      );
-      ReactServerDOMStaticServer = require('react-server-dom-webpack/static');
-    }
+    jest.mock('react-server-dom-webpack/static', () =>
+      require('react-server-dom-webpack/static.browser'),
+    );
+    ReactServerDOMStaticServer = require('react-server-dom-webpack/static');
 
     __unmockReact();
     jest.resetModules();
 
-    Scheduler = require('scheduler');
-    patchMessageChannel(Scheduler);
+    patchMessageChannel();
 
-    act = require('internal-test-utils').act;
+    ({act, assertConsoleErrorDev} = require('internal-test-utils'));
     React = require('react');
     ReactDOM = require('react-dom');
     ReactDOMClient = require('react-dom/client');
@@ -84,17 +88,6 @@ describe('ReactFlightDOMBrowser', () => {
     Suspense = React.Suspense;
     use = React.use;
   });
-
-  async function serverAct(callback) {
-    let maybePromise;
-    await reactServerAct(() => {
-      maybePromise = callback();
-      if (maybePromise && typeof maybePromise.catch === 'function') {
-        maybePromise.catch(() => {});
-      }
-    });
-    return maybePromise;
-  }
 
   function makeDelayedText(Model) {
     let error, _resolve, _reject;
@@ -162,6 +155,35 @@ describe('ReactFlightDOMBrowser', () => {
     const fn = requireServerRef(actionId);
     const args = await ReactServerDOMServer.decodeReply(body, webpackServerMap);
     return fn.apply(null, args);
+  }
+
+  function createDelayedStream(
+    stream: ReadableStream<Uint8Array>,
+  ): ReadableStream<Uint8Array> {
+    return new ReadableStream({
+      async start(controller) {
+        const reader = stream.getReader();
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) {
+            controller.close();
+          } else {
+            // Artificially delay between enqueuing chunks.
+            await new Promise(resolve => setTimeout(resolve));
+            controller.enqueue(value);
+          }
+        }
+      },
+    });
+  }
+
+  function normalizeCodeLocInfo(str) {
+    return (
+      str &&
+      str.replace(/^ +(?:at|in) ([\S]+)[^\n]*/gm, function (m, name) {
+        return '    in ' + name + (/\d/.test(m) ? ' (at **)' : '');
+      })
+    );
   }
 
   it('should resolve HTML using W3C streams', async () => {
@@ -720,7 +742,6 @@ describe('ReactFlightDOMBrowser', () => {
             name: 'Server',
             env: 'Server',
             key: null,
-            owner: null,
           }),
         }),
       );
@@ -736,7 +757,6 @@ describe('ReactFlightDOMBrowser', () => {
             name: 'Server',
             env: 'Server',
             key: null,
-            owner: null,
           }),
         }),
       );
@@ -1156,25 +1176,28 @@ describe('ReactFlightDOMBrowser', () => {
     const container = document.createElement('div');
     const root = ReactDOMClient.createRoot(container);
 
-    await expect(async () => {
-      const stream = await serverAct(() =>
-        ReactServerDOMServer.renderToReadableStream(
-          <>
-            <Parent>{Array(6).fill(<div>no key</div>)}</Parent>
-            <ParentModule.Parent>
-              {Array(6).fill(<div>no key</div>)}
-            </ParentModule.Parent>
-          </>,
-          webpackMap,
-        ),
-      );
-      const result =
-        await ReactServerDOMClient.createFromReadableStream(stream);
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(
+        <>
+          <Parent>{Array(6).fill(<div>no key</div>)}</Parent>
+          <ParentModule.Parent>
+            {Array(6).fill(<div>no key</div>)}
+          </ParentModule.Parent>
+        </>,
+        webpackMap,
+      ),
+    );
+    const result = await ReactServerDOMClient.createFromReadableStream(stream);
 
-      await act(() => {
-        root.render(result);
-      });
-    }).toErrorDev('Each child in a list should have a unique "key" prop.');
+    await act(() => {
+      root.render(result);
+    });
+    assertConsoleErrorDev([
+      'Each child in a list should have a unique "key" prop.\n\n' +
+        'Check the top-level render call using <ParentClient>. ' +
+        'See https://react.dev/link/warning-keys for more information.\n' +
+        '    in div (at **)',
+    ]);
   });
 
   it('basic use(promise)', async () => {
@@ -1747,6 +1770,9 @@ describe('ReactFlightDOMBrowser', () => {
         webpackMap,
       ),
     );
+
+    // Snapshot updates change this formatting, so we let prettier ignore it.
+    // prettier-ignore
     const response =
       await ReactServerDOMClient.createFromReadableStream(stream);
 
@@ -1896,54 +1922,16 @@ describe('ReactFlightDOMBrowser', () => {
 
     expect(content).toEqual(
       '<!DOCTYPE html><html><head>' +
-        '</head><body><p>hello world</p></body></html>',
+        (gate(flags => flags.enableFizzBlockingRender)
+          ? '<link rel="expect" href="#_R_" blocking="render"/>'
+          : '') +
+        '</head>' +
+        '<body><p>hello world</p>' +
+        (gate(flags => flags.enableFizzBlockingRender)
+          ? '<template id="_R_"></template>'
+          : '') +
+        '</body></html>',
     );
-  });
-
-  // @gate enablePostpone
-  it('supports postpone in Server Components', async () => {
-    function Server() {
-      React.unstable_postpone('testing postpone');
-      return 'Not shown';
-    }
-
-    let postponed = null;
-
-    const stream = await serverAct(() =>
-      ReactServerDOMServer.renderToReadableStream(
-        <Suspense fallback="Loading...">
-          <Server />
-        </Suspense>,
-        null,
-        {
-          onPostpone(reason) {
-            postponed = reason;
-          },
-        },
-      ),
-    );
-    const response = ReactServerDOMClient.createFromReadableStream(stream);
-
-    function Client() {
-      return use(response);
-    }
-
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(
-        <div>
-          Shell: <Client />
-        </div>,
-      );
-    });
-    // We should have reserved the shell already. Which means that the Server
-    // Component should've been a lazy component.
-    expect(container.innerHTML).toContain('Shell:');
-    expect(container.innerHTML).toContain('Loading...');
-    expect(container.innerHTML).not.toContain('Not shown');
-
-    expect(postponed).toBe('testing postpone');
   });
 
   it('should not continue rendering after the reader cancels', async () => {
@@ -1997,66 +1985,6 @@ describe('ReactFlightDOMBrowser', () => {
     ]);
   });
 
-  // @gate enablePostpone
-  it('postpones when abort passes a postpone signal', async () => {
-    const infinitePromise = new Promise(() => {});
-    function Server() {
-      return infinitePromise;
-    }
-
-    let postponed = null;
-    let error = null;
-
-    const controller = new AbortController();
-    const stream = await serverAct(() =>
-      ReactServerDOMServer.renderToReadableStream(
-        <Suspense fallback="Loading...">
-          <Server />
-        </Suspense>,
-        null,
-        {
-          onError(x) {
-            error = x;
-          },
-          onPostpone(reason) {
-            postponed = reason;
-          },
-          signal: controller.signal,
-        },
-      ),
-    );
-
-    try {
-      React.unstable_postpone('testing postpone');
-    } catch (reason) {
-      controller.abort(reason);
-    }
-
-    const response = ReactServerDOMClient.createFromReadableStream(stream);
-
-    function Client() {
-      return use(response);
-    }
-
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(
-        <div>
-          Shell: <Client />
-        </div>,
-      );
-    });
-    // We should have reserved the shell already. Which means that the Server
-    // Component should've been a lazy component.
-    expect(container.innerHTML).toContain('Shell:');
-    expect(container.innerHTML).toContain('Loading...');
-    expect(container.innerHTML).not.toContain('Not shown');
-
-    expect(postponed).toBe('testing postpone');
-    expect(error).toBe(null);
-  });
-
   function passThrough(stream) {
     // Simulate more realistic network by splitting up and rejoining some chunks.
     // This lets us test that we don't accidentally rely on particular bounds of the chunks.
@@ -2079,7 +2007,6 @@ describe('ReactFlightDOMBrowser', () => {
     });
   }
 
-  // @gate enableFlightReadableStream
   it('should supports streaming ReadableStream with objects', async () => {
     const errors = [];
     let controller1;
@@ -2161,7 +2088,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(errors).toEqual(['rejected']);
   });
 
-  // @gate enableFlightReadableStream
   it('should cancels the underlying ReadableStream when we are cancelled', async () => {
     let controller;
     let cancelReason;
@@ -2194,7 +2120,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(loggedReason).toBe(reason);
   });
 
-  // @gate enableFlightReadableStream
   it('should cancels the underlying ReadableStream when we abort', async () => {
     const errors = [];
     let controller;
@@ -2252,7 +2177,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(errors).toEqual([reason]);
   });
 
-  // @gate enableFlightReadableStream
   it('should supports streaming AsyncIterables with objects', async () => {
     let resolve;
     const wait = new Promise(r => (resolve = r));
@@ -2369,7 +2293,6 @@ describe('ReactFlightDOMBrowser', () => {
     );
   });
 
-  // @gate enableFlightReadableStream
   it('should cancels the underlying AsyncIterable when we are cancelled', async () => {
     let resolve;
     const wait = new Promise(r => (resolve = r));
@@ -2408,7 +2331,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(loggedReason).toBe(reason);
   });
 
-  // @gate enableFlightReadableStream
   it('should cancels the underlying AsyncIterable when we abort', async () => {
     const errors = [];
     const abortController = new AbortController();
@@ -2467,7 +2389,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(errors).toEqual([reason]);
   });
 
-  // @gate experimental
   it('can prerender', async () => {
     let resolveGreeting;
     const greetingPromise = new Promise(resolve => {
@@ -2516,7 +2437,6 @@ describe('ReactFlightDOMBrowser', () => {
     expect(container.innerHTML).toBe('<div>hello world</div>');
   });
 
-  // @gate enableHalt
   it('does not propagate abort reasons errors when aborting a prerender', async () => {
     let resolveGreeting;
     const greetingPromise = new Promise(resolve => {
@@ -2558,8 +2478,8 @@ describe('ReactFlightDOMBrowser', () => {
 
     controller.abort('boom');
     resolveGreeting();
-    const {prelude} = await pendingResult;
-    expect(errors).toEqual(['boom']);
+    const {prelude} = await serverAct(() => pendingResult);
+    expect(errors).toEqual([]);
 
     function ClientRoot({response}) {
       return use(response);
@@ -2580,17 +2500,641 @@ describe('ReactFlightDOMBrowser', () => {
       root.render(<ClientRoot response={response} />);
     });
 
-    if (__DEV__) {
-      expect(errors).toEqual([new Error('Connection closed.')]);
-      expect(container.innerHTML).toBe('');
-    } else {
-      // This is likely a bug. In Dev we get a connection closed error
-      // because the debug info creates a chunk that has a pending status
-      // and when the stream finishes we error if any chunks are still pending.
-      // In production there is no debug info so the missing chunk is never instantiated
-      // because nothing triggers model evaluation before the stream completes
-      expect(errors).toEqual([]);
-      expect(container.innerHTML).toBe('<div>loading...</div>');
+    expect(errors).toEqual([new Error('Connection closed.')]);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('renders Suspense fallback for unresolved promises with unstable_allowPartialStream', async () => {
+    let resolveGreeting;
+    const greetingPromise = new Promise(resolve => {
+      resolveGreeting = resolve;
+    });
+
+    function App() {
+      return (
+        <Suspense fallback="loading...">
+          <Greeting />
+        </Suspense>
+      );
     }
+
+    async function Greeting() {
+      const greeting = await greetingPromise;
+      return greeting;
+    }
+
+    const controller = new AbortController();
+    const {pendingResult} = await serverAct(async () => {
+      return {
+        pendingResult: ReactServerDOMStaticServer.prerender(
+          <App />,
+          webpackMap,
+          {
+            signal: controller.signal,
+          },
+        ),
+      };
+    });
+
+    controller.abort();
+    resolveGreeting('Hello, World!');
+    const {prelude} = await serverAct(() => pendingResult);
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(
+      passThrough(prelude),
+      {
+        unstable_allowPartialStream: true,
+      },
+    );
+    const container = document.createElement('div');
+    const errors = [];
+    const root = ReactDOMClient.createRoot(container, {
+      onUncaughtError(err) {
+        errors.push(err);
+      },
+    });
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    // With `unstable_allowPartialStream`, we should see the fallback instead of a
+    // 'Connection closed.' error
+    expect(errors).toEqual([]);
+    expect(container.innerHTML).toBe('loading...');
+  });
+
+  it('renders client components that are blocked on chunks with unstable_allowPartialStream', async () => {
+    let resolveClientComponentChunk;
+
+    const ClientComponent = clientExports(
+      function ClientComponent({children}) {
+        return <div>{children}</div>;
+      },
+      '42',
+      '/test.js',
+      new Promise(resolve => (resolveClientComponentChunk = resolve)),
+    );
+
+    function App() {
+      return <ClientComponent>Hello, World!</ClientComponent>;
+    }
+
+    const controller = new AbortController();
+    const {pendingResult} = await serverAct(async () => {
+      return {
+        pendingResult: ReactServerDOMStaticServer.prerender(
+          <App />,
+          webpackMap,
+          {
+            signal: controller.signal,
+          },
+        ),
+      };
+    });
+
+    controller.abort();
+    const {prelude} = await serverAct(() => pendingResult);
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(
+      passThrough(prelude),
+      {
+        unstable_allowPartialStream: true,
+      },
+    );
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    expect(container.innerHTML).toBe('');
+
+    await act(() => {
+      resolveClientComponentChunk();
+    });
+
+    expect(container.innerHTML).toBe('<div>Hello, World!</div>');
+  });
+
+  it('closes inner ReadableStreams gracefully with unstable_allowPartialStream', async () => {
+    let streamController;
+    const innerStream = new ReadableStream({
+      start(c) {
+        streamController = c;
+      },
+    });
+
+    const abortController = new AbortController();
+    const {pendingResult} = await serverAct(async () => {
+      streamController.enqueue({hello: 'world'});
+      return {
+        pendingResult: ReactServerDOMStaticServer.prerender(
+          {stream: innerStream},
+          webpackMap,
+          {
+            signal: abortController.signal,
+          },
+        ),
+      };
+    });
+
+    abortController.abort();
+    const {prelude} = await serverAct(() => pendingResult);
+
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      passThrough(prelude),
+      {
+        unstable_allowPartialStream: true,
+      },
+    );
+
+    // The inner stream should be readable up to what was enqueued.
+    const reader = response.stream.getReader();
+    const {value, done} = await reader.read();
+    expect(value).toEqual({hello: 'world'});
+    expect(done).toBe(false);
+
+    // The next read should signal the stream is done (closed, not errored).
+    const final = await reader.read();
+    expect(final.done).toBe(true);
+  });
+
+  it('can dedupe references inside promises', async () => {
+    const foo = {};
+    const bar = {
+      foo: foo,
+    };
+    foo.bar = bar;
+
+    const object = {
+      foo: Promise.resolve(foo),
+      bar: Promise.resolve(bar),
+    };
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(object, webpackMap),
+    );
+
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      passThrough(stream),
+    );
+
+    const responseFoo = await response.foo;
+    const responseBar = await response.bar;
+    expect(responseFoo.bar).toBe(responseBar);
+    expect(responseBar.foo).toBe(responseFoo);
+  });
+
+  it('can deduped outlined references inside promises', async () => {
+    const foo = {};
+    const bar = new Set([foo]); // This will be outlined which can create a future reference
+    foo.bar = bar;
+
+    const object = {
+      foo: Promise.resolve(foo),
+      bar: Promise.resolve(bar),
+    };
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(object, webpackMap),
+    );
+
+    const response = await ReactServerDOMClient.createFromReadableStream(
+      passThrough(stream),
+    );
+
+    const responseFoo = await response.foo;
+    const responseBar = await response.bar;
+    expect(responseFoo.bar).toBe(responseBar);
+    expect(Array.from(responseBar)[0]).toBe(responseFoo);
+  });
+
+  it('should resolve deduped references in maps used in client component props', async () => {
+    const ClientComponent = clientExports(function ClientComponent({
+      shared,
+      map,
+    }) {
+      expect(map.get(42)).toBe(shared);
+      return JSON.stringify({shared, map: Array.from(map)});
+    });
+
+    function Server() {
+      const shared = {id: 42};
+      const map = new Map([[42, shared]]);
+
+      return <ClientComponent shared={shared} map={map} />;
+    }
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(<Server />, webpackMap),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(stream);
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    expect(container.innerHTML).toBe(
+      '{"shared":{"id":42},"map":[[42,{"id":42}]]}',
+    );
+  });
+
+  it('should resolve a cycle between debug info and the value it produces', async () => {
+    function Inner({style}) {
+      return <div style={style} />;
+    }
+
+    function Component({style}) {
+      return <Inner style={style} />;
+    }
+
+    const style = {};
+    const element = <Component style={style} />;
+    style.element = element;
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(element, webpackMap),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(stream);
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    expect(container.innerHTML).toBe('<div></div>');
+  });
+
+  it('does not close the response early when using a fast debug channel', async () => {
+    function Component() {
+      return <div>Hi</div>;
+    }
+
+    let debugReadableStreamController;
+
+    const debugReadableStream = new ReadableStream({
+      start(controller) {
+        debugReadableStreamController = controller;
+      },
+    });
+
+    const rscStream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(<Component />, webpackMap, {
+        debugChannel: {
+          writable: new WritableStream({
+            write(chunk) {
+              debugReadableStreamController.enqueue(chunk);
+            },
+            close() {
+              debugReadableStreamController.close();
+            },
+          }),
+        },
+      }),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(
+      // Create a delayed stream to simulate that the RSC stream might be
+      // transported slower than the debug channel, which must not lead to a
+      // `Connection closed` error in the Flight client.
+      createDelayedStream(rscStream),
+      {
+        debugChannel: {readable: debugReadableStream},
+      },
+    );
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    expect(container.innerHTML).toBe('<div>Hi</div>');
+  });
+
+  it('can transport debug info through a dedicated debug channel', async () => {
+    let ownerStack;
+
+    const ClientComponent = clientExports(() => {
+      ownerStack = React.captureOwnerStack ? React.captureOwnerStack() : null;
+      return <p>Hi</p>;
+    });
+
+    function App() {
+      return ReactServer.createElement(
+        ReactServer.Suspense,
+        null,
+        ReactServer.createElement(ClientComponent, null),
+      );
+    }
+
+    let debugReadableStreamController;
+
+    const debugReadableStream = new ReadableStream({
+      start(controller) {
+        debugReadableStreamController = controller;
+      },
+    });
+
+    const rscStream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(
+        ReactServer.createElement(App, null),
+        webpackMap,
+        {
+          debugChannel: {
+            writable: new WritableStream({
+              write(chunk) {
+                debugReadableStreamController.enqueue(chunk);
+              },
+              close() {
+                debugReadableStreamController.close();
+              },
+            }),
+          },
+        },
+      ),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(rscStream, {
+      replayConsoleLogs: true,
+      debugChannel: {
+        readable: debugReadableStream,
+        // Explicitly not defining a writable side here. Its presence was
+        // previously used as a condition to wait for referenced debug chunks.
+      },
+    });
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    if (__DEV__) {
+      expect(normalizeCodeLocInfo(ownerStack)).toBe('\n    in App (at **)');
+    }
+
+    expect(container.innerHTML).toBe('<p>Hi</p>');
+  });
+
+  it('should not have missing key warnings when a static child is blocked on debug info', async () => {
+    const ClientComponent = clientExports(function ClientComponent({element}) {
+      return (
+        <div>
+          <span>Hi</span>
+          {element}
+        </div>
+      );
+    });
+
+    let debugReadableStreamController;
+
+    const debugReadableStream = new ReadableStream({
+      start(controller) {
+        debugReadableStreamController = controller;
+      },
+    });
+
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(
+        <ClientComponent element={<span>Sebbie</span>} />,
+        webpackMap,
+        {
+          debugChannel: {
+            writable: new WritableStream({
+              write(chunk) {
+                debugReadableStreamController.enqueue(chunk);
+              },
+              close() {
+                debugReadableStreamController.close();
+              },
+            }),
+          },
+        },
+      ),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(stream, {
+      debugChannel: {readable: createDelayedStream(debugReadableStream)},
+    });
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    // Wait for the debug info to be processed.
+    await act(() => {});
+
+    expect(container.innerHTML).toBe(
+      '<div><span>Hi</span><span>Sebbie</span></div>',
+    );
+  });
+
+  it('should fully resolve debug info when transported through a (slow) debug channel', async () => {
+    function Paragraph({children}) {
+      return ReactServer.createElement('p', null, children);
+    }
+
+    let debugReadableStreamController;
+
+    const debugReadableStream = new ReadableStream({
+      start(controller) {
+        debugReadableStreamController = controller;
+      },
+    });
+
+    const app = ReactServer.createElement(
+      ReactServer.Fragment,
+      null,
+      ReactServer.createElement(Paragraph, null, 'foo'),
+      ReactServer.createElement(Paragraph, null, 'bar'),
+    );
+    const stream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(
+        {
+          root: app,
+        },
+        webpackMap,
+        {
+          debugChannel: {
+            writable: new WritableStream({
+              write(chunk) {
+                debugReadableStreamController.enqueue(chunk);
+              },
+              close() {
+                debugReadableStreamController.close();
+              },
+            }),
+          },
+        },
+      ),
+    );
+
+    function ClientRoot({response}) {
+      const {root} = use(response);
+      return root;
+    }
+
+    const [slowDebugStream1, slowDebugStream2] =
+      createDelayedStream(debugReadableStream).tee();
+
+    const response = ReactServerDOMClient.createFromReadableStream(stream, {
+      debugChannel: {readable: slowDebugStream1},
+    });
+
+    const container = document.createElement('div');
+    const clientRoot = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      clientRoot.render(<ClientRoot response={response} />);
+    });
+
+    if (__DEV__) {
+      const debugStreamReader = slowDebugStream2.getReader();
+      while (true) {
+        const {done} = await debugStreamReader.read();
+        if (done) {
+          break;
+        }
+        // Allow the client to process each debug chunk as it arrives.
+        await act(() => {});
+      }
+    }
+
+    expect(container.innerHTML).toBe('<p>foo</p><p>bar</p>');
+
+    if (
+      __DEV__ &&
+      gate(
+        flags =>
+          flags.enableComponentPerformanceTrack && flags.enableAsyncDebugInfo,
+      )
+    ) {
+      const result = await response;
+      const firstParagraph = result.root[0];
+
+      expect(getDebugInfo(firstParagraph)).toMatchInlineSnapshot(`
+        [
+          {
+            "time": 0,
+          },
+          {
+            "env": "Server",
+            "key": null,
+            "name": "Paragraph",
+            "props": {},
+            "stack": [
+              [
+                "Object.<anonymous>",
+                "/packages/react-server-dom-webpack/src/__tests__/ReactFlightDOMBrowser-test.js",
+                2989,
+                19,
+                2973,
+                89,
+              ],
+            ],
+          },
+          {
+            "time": 0,
+          },
+        ]
+      `);
+    }
+  });
+
+  it('should resolve a cycle between debug info and the value it produces when using a debug channel', async () => {
+    // Same as `should resolve a cycle between debug info and the value it produces`, but using a debug channel.
+
+    function Inner({style}) {
+      return <div style={style} />;
+    }
+
+    function Component({style}) {
+      return <Inner style={style} />;
+    }
+
+    const style = {};
+    const element = <Component style={style} />;
+    style.element = element;
+
+    let debugReadableStreamController;
+
+    const debugReadableStream = new ReadableStream({
+      start(controller) {
+        debugReadableStreamController = controller;
+      },
+    });
+
+    const rscStream = await serverAct(() =>
+      ReactServerDOMServer.renderToReadableStream(element, webpackMap, {
+        debugChannel: {
+          writable: new WritableStream({
+            write(chunk) {
+              debugReadableStreamController.enqueue(chunk);
+            },
+            close() {
+              debugReadableStreamController.close();
+            },
+          }),
+        },
+      }),
+    );
+
+    function ClientRoot({response}) {
+      return use(response);
+    }
+
+    const response = ReactServerDOMClient.createFromReadableStream(rscStream, {
+      debugChannel: {readable: debugReadableStream},
+    });
+
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() => {
+      root.render(<ClientRoot response={response} />);
+    });
+
+    expect(container.innerHTML).toBe('<div></div>');
   });
 });

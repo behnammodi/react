@@ -9,7 +9,11 @@
 
 import type {Fiber} from './ReactInternalTypes';
 import type {StackCursor} from './ReactFiberStack';
-import type {Container, HostContext} from './ReactFiberConfig';
+import type {
+  Container,
+  HostContext,
+  TransitionStatus,
+} from './ReactFiberConfig';
 import type {Hook} from './ReactFiberHooks';
 
 import {
@@ -20,7 +24,6 @@ import {
   isPrimaryRenderer,
 } from './ReactFiberConfig';
 import {createCursor, push, pop} from './ReactFiberStack';
-import {enableAsyncActions} from 'shared/ReactFeatureFlags';
 
 const contextStackCursor: StackCursor<HostContext | null> = createCursor(null);
 const contextFiberStackCursor: StackCursor<Fiber | null> = createCursor(null);
@@ -91,13 +94,26 @@ function getHostContext(): HostContext {
 }
 
 function pushHostContext(fiber: Fiber): void {
-  if (enableAsyncActions) {
-    const stateHook: Hook | null = fiber.memoizedState;
-    if (stateHook !== null) {
-      // Only provide context if this fiber has been upgraded by a host
-      // transition. We use the same optimization for regular host context below.
-      push(hostTransitionProviderCursor, fiber, fiber);
+  const stateHook: Hook | null = fiber.memoizedState;
+  if (stateHook !== null) {
+    // Propagate the current state to all the descendents.
+    // We use Context as an implementation detail for this.
+    //
+    // NOTE: This assumes that there cannot be nested transition providers,
+    // because the only renderer that implements this feature is React DOM,
+    // and forms cannot be nested. If we did support nested providers, then
+    // we would need to push a context value even for host fibers that
+    // haven't been upgraded yet.
+    const transitionStatus: TransitionStatus = stateHook.memoizedState;
+    if (isPrimaryRenderer) {
+      HostTransitionContext._currentValue = transitionStatus;
+    } else {
+      HostTransitionContext._currentValue2 = transitionStatus;
     }
+
+    // Only provide context if this fiber has been upgraded by a host
+    // transition. We use the same optimization for regular host context below.
+    push(hostTransitionProviderCursor, fiber, fiber);
   }
 
   const context: HostContext = requiredContext(contextStackCursor.current);
@@ -120,25 +136,23 @@ function popHostContext(fiber: Fiber): void {
     pop(contextFiberStackCursor, fiber);
   }
 
-  if (enableAsyncActions) {
-    if (hostTransitionProviderCursor.current === fiber) {
-      // Do not pop unless this Fiber provided the current context. This is mostly
-      // a performance optimization, but conveniently it also prevents a potential
-      // data race where a host provider is upgraded (i.e. memoizedState becomes
-      // non-null) during a concurrent event. This is a bit of a flaw in the way
-      // we upgrade host components, but because we're accounting for it here, it
-      // should be fine.
-      pop(hostTransitionProviderCursor, fiber);
+  if (hostTransitionProviderCursor.current === fiber) {
+    // Do not pop unless this Fiber provided the current context. This is mostly
+    // a performance optimization, but conveniently it also prevents a potential
+    // data race where a host provider is upgraded (i.e. memoizedState becomes
+    // non-null) during a concurrent event. This is a bit of a flaw in the way
+    // we upgrade host components, but because we're accounting for it here, it
+    // should be fine.
+    pop(hostTransitionProviderCursor, fiber);
 
-      // When popping the transition provider, we reset the context value back
-      // to `NotPendingTransition`. We can do this because you're not allowed to nest forms. If
-      // we allowed for multiple nested host transition providers, then we'd
-      // need to reset this to the parent provider's status.
-      if (isPrimaryRenderer) {
-        HostTransitionContext._currentValue = NotPendingTransition;
-      } else {
-        HostTransitionContext._currentValue2 = NotPendingTransition;
-      }
+    // When popping the transition provider, we reset the context value back
+    // to `NotPendingTransition`. We can do this because you're not allowed to nest forms. If
+    // we allowed for multiple nested host transition providers, then we'd
+    // need to reset this to the parent provider's status.
+    if (isPrimaryRenderer) {
+      HostTransitionContext._currentValue = NotPendingTransition;
+    } else {
+      HostTransitionContext._currentValue2 = NotPendingTransition;
     }
   }
 }

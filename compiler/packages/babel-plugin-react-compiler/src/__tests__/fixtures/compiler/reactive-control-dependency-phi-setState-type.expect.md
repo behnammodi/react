@@ -61,8 +61,8 @@ import { useState } from "react";
 
 function Component(props) {
   const $ = _c(5);
-  const [x, setX] = useState(false);
-  const [y, setY] = useState(false);
+  const [, setX] = useState(false);
+  const [, setY] = useState(false);
   let setState;
   if (props.cond) {
     setState = setX;
@@ -106,6 +106,7 @@ function Foo(t0) {
   } else {
     invariant(setState === setY, "Expected the correct setState function");
   }
+
   return "ok";
 }
 

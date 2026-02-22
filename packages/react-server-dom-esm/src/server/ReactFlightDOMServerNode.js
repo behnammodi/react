@@ -18,6 +18,8 @@ import type {Busboy} from 'busboy';
 import type {Writable} from 'stream';
 import type {Thenable} from 'shared/ReactTypes';
 
+import type {Duplex} from 'stream';
+
 import {Readable} from 'stream';
 
 import {
@@ -25,8 +27,11 @@ import {
   createPrerenderRequest,
   startWork,
   startFlowing,
+  startFlowingDebug,
   stopFlowing,
   abort,
+  resolveDebugMessage,
+  closeDebugChannel,
 } from 'react-server/src/ReactFlightServer';
 
 import {
@@ -50,6 +55,12 @@ export {
   registerClientReference,
 } from '../ReactFlightESMReferences';
 
+import {
+  createStringDecoder,
+  readPartialStringChunk,
+  readFinalStringChunk,
+} from 'react-client/src/ReactFlightClientStreamConfigNode';
+
 import type {TemporaryReferenceSet} from 'react-server/src/ReactFlightServerTemporaryReferences';
 
 export {createTemporaryReferenceSet} from 'react-server/src/ReactFlightServerTemporaryReferences';
@@ -67,13 +78,75 @@ function createCancelHandler(request: Request, reason: string) {
   };
 }
 
+function startReadingFromDebugChannelReadable(
+  request: Request,
+  stream: Readable | WebSocket,
+): void {
+  const stringDecoder = createStringDecoder();
+  let lastWasPartial = false;
+  let stringBuffer = '';
+  function onData(chunk: string | Uint8Array) {
+    if (typeof chunk === 'string') {
+      if (lastWasPartial) {
+        stringBuffer += readFinalStringChunk(stringDecoder, new Uint8Array(0));
+        lastWasPartial = false;
+      }
+      stringBuffer += chunk;
+    } else {
+      const buffer: Uint8Array = (chunk: any);
+      stringBuffer += readPartialStringChunk(stringDecoder, buffer);
+      lastWasPartial = true;
+    }
+    const messages = stringBuffer.split('\n');
+    for (let i = 0; i < messages.length - 1; i++) {
+      resolveDebugMessage(request, messages[i]);
+    }
+    stringBuffer = messages[messages.length - 1];
+  }
+  function onError(error: mixed) {
+    abort(
+      request,
+      new Error('Lost connection to the Debug Channel.', {
+        cause: error,
+      }),
+    );
+  }
+  function onClose() {
+    closeDebugChannel(request);
+  }
+  if (
+    // $FlowFixMe[method-unbinding]
+    typeof stream.addEventListener === 'function' &&
+    // $FlowFixMe[method-unbinding]
+    typeof stream.binaryType === 'string'
+  ) {
+    const ws: WebSocket = (stream: any);
+    ws.binaryType = 'arraybuffer';
+    ws.addEventListener('message', event => {
+      // $FlowFixMe
+      onData(event.data);
+    });
+    ws.addEventListener('error', event => {
+      // $FlowFixMe
+      onError(event.error);
+    });
+    ws.addEventListener('close', onClose);
+  } else {
+    const readable: Readable = (stream: any);
+    readable.on('data', onData);
+    readable.on('error', onError);
+    readable.on('end', onClose);
+  }
+}
+
 type Options = {
+  debugChannel?: Readable | Writable | Duplex | WebSocket,
   environmentName?: string | (() => string),
   filterStackFrame?: (url: string, functionName: string) => boolean,
   onError?: (error: mixed) => void,
-  onPostpone?: (reason: string) => void,
   identifierPrefix?: string,
   temporaryReferences?: TemporaryReferenceSet,
+  startTime?: number,
 };
 
 type PipeableStream = {
@@ -86,18 +159,44 @@ function renderToPipeableStream(
   moduleBasePath: ClientManifest,
   options?: Options,
 ): PipeableStream {
+  const debugChannel = __DEV__ && options ? options.debugChannel : undefined;
+  const debugChannelReadable: void | Readable | WebSocket =
+    __DEV__ &&
+    debugChannel !== undefined &&
+    // $FlowFixMe[method-unbinding]
+    (typeof debugChannel.read === 'function' ||
+      typeof debugChannel.readyState === 'number')
+      ? (debugChannel: any)
+      : undefined;
+  const debugChannelWritable: void | Writable =
+    __DEV__ && debugChannel !== undefined
+      ? // $FlowFixMe[method-unbinding]
+        typeof debugChannel.write === 'function'
+        ? (debugChannel: any)
+        : // $FlowFixMe[method-unbinding]
+          typeof debugChannel.send === 'function'
+          ? createFakeWritableFromWebSocket((debugChannel: any))
+          : undefined
+      : undefined;
   const request = createRequest(
     model,
     moduleBasePath,
     options ? options.onError : undefined,
     options ? options.identifierPrefix : undefined,
-    options ? options.onPostpone : undefined,
     options ? options.temporaryReferences : undefined,
+    options ? options.startTime : undefined,
     __DEV__ && options ? options.environmentName : undefined,
     __DEV__ && options ? options.filterStackFrame : undefined,
+    debugChannelReadable !== undefined,
   );
   let hasStartedFlowing = false;
   startWork(request);
+  if (debugChannelWritable !== undefined) {
+    startFlowingDebug(request, debugChannelWritable);
+  }
+  if (debugChannelReadable !== undefined) {
+    startReadingFromDebugChannelReadable(request, debugChannelReadable);
+  }
   return {
     pipe<T: Writable>(destination: T): T {
       if (hasStartedFlowing) {
@@ -115,10 +214,13 @@ function renderToPipeableStream(
           'The destination stream errored while writing data.',
         ),
       );
-      destination.on(
-        'close',
-        createCancelHandler(request, 'The destination stream closed early.'),
-      );
+      // We don't close until the debug channel closes.
+      if (!__DEV__ || debugChannelReadable === undefined) {
+        destination.on(
+          'close',
+          createCancelHandler(request, 'The destination stream closed early.'),
+        );
+      }
       return destination;
     },
     abort(reason: mixed) {
@@ -126,11 +228,34 @@ function renderToPipeableStream(
     },
   };
 }
+
+function createFakeWritableFromWebSocket(webSocket: WebSocket): Writable {
+  return ({
+    write(chunk: string | Uint8Array) {
+      webSocket.send((chunk: any));
+      return true;
+    },
+    end() {
+      webSocket.close();
+    },
+    destroy(reason) {
+      if (typeof reason === 'object' && reason !== null) {
+        reason = reason.message;
+      }
+      if (typeof reason === 'string') {
+        webSocket.close(1011, reason);
+      } else {
+        webSocket.close(1011);
+      }
+    },
+  }: any);
+}
+
 function createFakeWritable(readable: any): Writable {
   // The current host config expects a Writable so we create
   // a fake writable for now to push into the Readable.
   return ({
-    write(chunk) {
+    write(chunk: string | Uint8Array) {
       return readable.push(chunk);
     },
     end() {
@@ -146,10 +271,10 @@ type PrerenderOptions = {
   environmentName?: string | (() => string),
   filterStackFrame?: (url: string, functionName: string) => boolean,
   onError?: (error: mixed) => void,
-  onPostpone?: (reason: string) => void,
   identifierPrefix?: string,
   temporaryReferences?: TemporaryReferenceSet,
   signal?: AbortSignal,
+  startTime?: number,
 };
 
 type StaticResult = {
@@ -180,10 +305,11 @@ function prerenderToNodeStream(
       onFatalError,
       options ? options.onError : undefined,
       options ? options.identifierPrefix : undefined,
-      options ? options.onPostpone : undefined,
       options ? options.temporaryReferences : undefined,
+      options ? options.startTime : undefined,
       __DEV__ && options ? options.environmentName : undefined,
       __DEV__ && options ? options.filterStackFrame : undefined,
+      false,
     );
     if (options && options.signal) {
       const signal = options.signal;
@@ -206,12 +332,17 @@ function prerenderToNodeStream(
 function decodeReplyFromBusboy<T>(
   busboyStream: Busboy,
   moduleBasePath: ServerManifest,
-  options?: {temporaryReferences?: TemporaryReferenceSet},
+  options?: {
+    temporaryReferences?: TemporaryReferenceSet,
+    arraySizeLimit?: number,
+  },
 ): Thenable<T> {
   const response = createResponse(
     moduleBasePath,
     '',
     options ? options.temporaryReferences : undefined,
+    undefined,
+    options ? options.arraySizeLimit : undefined,
   );
   let pendingFiles = 0;
   const queuedFields: Array<string> = [];
@@ -222,16 +353,23 @@ function decodeReplyFromBusboy<T>(
       // we queue any fields we receive until the previous file is done.
       queuedFields.push(name, value);
     } else {
-      resolveField(response, name, value);
+      try {
+        resolveField(response, name, value);
+      } catch (error) {
+        busboyStream.destroy(error);
+      }
     }
   });
   busboyStream.on('file', (name, value, {filename, encoding, mimeType}) => {
     if (encoding.toLowerCase() === 'base64') {
-      throw new Error(
-        "React doesn't accept base64 encoded file uploads because we don't expect " +
-          "form data passed from a browser to ever encode data that way. If that's " +
-          'the wrong assumption, we can easily fix it.',
+      busboyStream.destroy(
+        new Error(
+          "React doesn't accept base64 encoded file uploads because we don't expect " +
+            "form data passed from a browser to ever encode data that way. If that's " +
+            'the wrong assumption, we can easily fix it.',
+        ),
       );
+      return;
     }
     pendingFiles++;
     const file = resolveFileInfo(response, name, filename, mimeType);
@@ -239,14 +377,18 @@ function decodeReplyFromBusboy<T>(
       resolveFileChunk(response, file, chunk);
     });
     value.on('end', () => {
-      resolveFileComplete(response, name, file);
-      pendingFiles--;
-      if (pendingFiles === 0) {
-        // Release any queued fields
-        for (let i = 0; i < queuedFields.length; i += 2) {
-          resolveField(response, queuedFields[i], queuedFields[i + 1]);
+      try {
+        resolveFileComplete(response, name, file);
+        pendingFiles--;
+        if (pendingFiles === 0) {
+          // Release any queued fields
+          for (let i = 0; i < queuedFields.length; i += 2) {
+            resolveField(response, queuedFields[i], queuedFields[i + 1]);
+          }
+          queuedFields.length = 0;
         }
-        queuedFields.length = 0;
+      } catch (error) {
+        busboyStream.destroy(error);
       }
     });
   });
@@ -266,7 +408,10 @@ function decodeReplyFromBusboy<T>(
 function decodeReply<T>(
   body: string | FormData,
   moduleBasePath: ServerManifest,
-  options?: {temporaryReferences?: TemporaryReferenceSet},
+  options?: {
+    temporaryReferences?: TemporaryReferenceSet,
+    arraySizeLimit?: number,
+  },
 ): Thenable<T> {
   if (typeof body === 'string') {
     const form = new FormData();
@@ -278,6 +423,7 @@ function decodeReply<T>(
     '',
     options ? options.temporaryReferences : undefined,
     body,
+    options ? options.arraySizeLimit : undefined,
   );
   const root = getRoot<T>(response);
   close(response);
@@ -287,8 +433,8 @@ function decodeReply<T>(
 export {
   renderToPipeableStream,
   prerenderToNodeStream,
-  decodeReplyFromBusboy,
   decodeReply,
+  decodeReplyFromBusboy,
   decodeAction,
   decodeFormState,
 };

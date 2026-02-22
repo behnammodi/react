@@ -7,11 +7,7 @@
  * @flow
  */
 
-import type {
-  PostponedState,
-  ErrorInfo,
-  PostponeInfo,
-} from 'react-server/src/ReactFizzServer';
+import type {PostponedState, ErrorInfo} from 'react-server/src/ReactFizzServer';
 import type {ReactNodeList, ReactFormState} from 'shared/ReactTypes';
 import type {
   BootstrapScriptDescriptor,
@@ -40,17 +36,23 @@ import {
 import {ensureCorrectIsomorphicReactVersion} from '../shared/ensureCorrectIsomorphicReactVersion';
 ensureCorrectIsomorphicReactVersion();
 
+type NonceOption =
+  | string
+  | {
+      script?: string,
+      style?: string,
+    };
+
 type Options = {
   identifierPrefix?: string,
   namespaceURI?: string,
-  nonce?: string,
+  nonce?: NonceOption,
   bootstrapScriptContent?: string,
   bootstrapScripts?: Array<string | BootstrapScriptDescriptor>,
   bootstrapModules?: Array<string | BootstrapScriptDescriptor>,
   progressiveChunkSize?: number,
   signal?: AbortSignal,
   onError?: (error: mixed, errorInfo: ErrorInfo) => ?string,
-  onPostpone?: (reason: string, postponeInfo: PostponeInfo) => void,
   unstable_externalRuntimeSrc?: string | BootstrapScriptDescriptor,
   importMap?: ImportMap,
   formState?: ReactFormState<any, any> | null,
@@ -59,10 +61,9 @@ type Options = {
 };
 
 type ResumeOptions = {
-  nonce?: string,
+  nonce?: NonceOption,
   signal?: AbortSignal,
   onError?: (error: mixed) => ?string,
-  onPostpone?: (reason: string) => void,
   unstable_externalRuntimeSrc?: string | BootstrapScriptDescriptor,
 };
 
@@ -143,7 +144,6 @@ function renderToReadableStream(
       onShellReady,
       onShellError,
       onFatalError,
-      options ? options.onPostpone : undefined,
       options ? options.formState : undefined,
     );
     if (options && options.signal) {
@@ -213,7 +213,6 @@ function resume(
       onShellReady,
       onShellError,
       onFatalError,
-      options ? options.onPostpone : undefined,
     );
     if (options && options.signal) {
       const signal = options.signal;

@@ -2,10 +2,11 @@
 
 const {getTestFlags} = require('./TestFlags');
 const {
-  flushAllUnexpectedConsoleCalls,
+  assertConsoleLogsCleared,
   resetAllUnexpectedConsoleCalls,
   patchConsoleMethods,
 } = require('internal-test-utils/consoleMock');
+const path = require('path');
 
 if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   // Inside the class equivalence tester, we have a custom environment, let's
@@ -17,6 +18,9 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   // By default, jest.spyOn also calls the spied method.
   const spyOn = jest.spyOn;
   const noop = jest.fn;
+
+  // Can be used to normalize paths in stackframes
+  global.__REACT_ROOT_PATH_TEST__ = path.resolve(__dirname, '../..');
 
   // Spying on console methods in production builds can mask errors.
   // This is why we added an explicit spyOnDev() helper.
@@ -44,7 +48,6 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   expect.extend({
     ...require('./matchers/reactTestMatchers'),
     ...require('./matchers/toThrow'),
-    ...require('./matchers/toWarnDev'),
   });
 
   // We have a Babel transform that inserts guards against infinite loops.
@@ -66,7 +69,19 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   // Patch the console to assert that all console error/warn/log calls assert.
   patchConsoleMethods({includeLog: !!process.env.CI});
   beforeEach(resetAllUnexpectedConsoleCalls);
-  afterEach(flushAllUnexpectedConsoleCalls);
+  afterEach(assertConsoleLogsCleared);
+
+  // TODO: enable this check so we don't forget to reset spyOnX mocks.
+  // afterEach(() => {
+  //   if (
+  //       console[methodName] !== mockMethod &&
+  //       !jest.isMockFunction(console[methodName])
+  //   ) {
+  //     throw new Error(
+  //       `Test did not tear down console.${methodName} mock properly.`
+  //     );
+  //   }
+  // });
 
   if (process.env.NODE_ENV === 'production') {
     // In production, we strip error messages and turn them into codes.
@@ -124,6 +139,13 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
             );
           }
           return Reflect.set(target, key, value, receiver);
+        },
+        get(target, key, receiver) {
+          if (key === 'stack') {
+            // https://github.com/nodejs/node/issues/60862
+            return Reflect.get(target, key);
+          }
+          return Reflect.get(target, key, receiver);
         },
       });
       originalErrorInstances.set(proxy, error);
@@ -187,7 +209,7 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
       // Flush unexpected console calls inside the test itself, instead of in
       // `afterEach` like we normally do. `afterEach` is too late because if it
       // throws, we won't have captured it.
-      flushAllUnexpectedConsoleCalls();
+      assertConsoleLogsCleared();
     } catch (testError) {
       didError = true;
     }
@@ -274,4 +296,37 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
     const flags = getTestFlags();
     return gateFn(flags);
   };
+
+  // We augment JSDOM to produce a document that has a loading readyState by default
+  // and can be changed. We mock it here globally so we don't have to import our special
+  // mock in every file.
+  jest.mock('jsdom', () => {
+    return require('internal-test-utils/ReactJSDOM.js');
+  });
 }
+
+// We mock createHook so that we can automatically clean it up.
+let installedHook = null;
+jest.mock('async_hooks', () => {
+  const actual = jest.requireActual('async_hooks');
+  return {
+    ...actual,
+    createHook(config) {
+      if (installedHook) {
+        installedHook.disable();
+      }
+      return (installedHook = actual.createHook(config));
+    },
+  };
+});
+
+// Ensure async hooks are disabled after each test to prevent cross-test pollution.
+// This is needed because test files that load the Node server (with async debug hooks)
+// can pollute test files that load the Edge server (which doesn't create new hooks
+// to trigger the cleanup in the mock above).
+afterEach(() => {
+  if (installedHook) {
+    installedHook.disable();
+    installedHook = null;
+  }
+});

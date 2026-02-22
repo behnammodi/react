@@ -7,20 +7,22 @@
 
 import {CompilerError} from '..';
 import {
-  BlockId,
   Effect,
+  Environment,
   HIRFunction,
   Identifier,
   IdentifierId,
+  Instruction,
   Place,
-  computePostDominatorTree,
+  evaluatesToStableTypeOrContainer,
   getHookKind,
   isStableType,
+  isStableTypeContainer,
   isUseOperator,
 } from '../HIR';
-import {PostDominator} from '../HIR/Dominator';
 import {
   eachInstructionLValue,
+  eachInstructionOperand,
   eachInstructionValueOperand,
   eachTerminalOperand,
 } from '../HIR/visitors';
@@ -30,7 +32,98 @@ import {
 } from '../ReactiveScopes/InferReactiveScopeVariables';
 import DisjointSet from '../Utils/DisjointSet';
 import {assertExhaustive} from '../Utils/utils';
+import {createControlDominators} from './ControlDominators';
 
+/**
+ * Side map to track and propagate sources of stability (i.e. hook calls such as
+ * `useRef()` and property reads such as `useState()[1]). Note that this
+ * requires forward data flow analysis since stability is not part of React
+ * Compiler's type system.
+ */
+class StableSidemap {
+  map: Map<IdentifierId, {isStable: boolean}> = new Map();
+  env: Environment;
+
+  constructor(env: Environment) {
+    this.env = env;
+  }
+
+  handleInstruction(instr: Instruction): void {
+    const {value, lvalue} = instr;
+
+    switch (value.kind) {
+      case 'CallExpression':
+      case 'MethodCall': {
+        /**
+         * Sources of stability are known hook calls
+         */
+        if (evaluatesToStableTypeOrContainer(this.env, instr)) {
+          if (isStableType(lvalue.identifier)) {
+            this.map.set(lvalue.identifier.id, {
+              isStable: true,
+            });
+          } else {
+            this.map.set(lvalue.identifier.id, {
+              isStable: false,
+            });
+          }
+        }
+        break;
+      }
+
+      case 'Destructure':
+      case 'PropertyLoad': {
+        /**
+         * PropertyLoads may from stable containers may also produce stable
+         * values. ComputedLoads are technically safe for now (as all stable
+         * containers have differently-typed elements), but are not handled as
+         * they should be rare anyways.
+         */
+        const source =
+          value.kind === 'Destructure'
+            ? value.value.identifier.id
+            : value.object.identifier.id;
+        const entry = this.map.get(source);
+        if (entry) {
+          for (const lvalue of eachInstructionLValue(instr)) {
+            if (isStableTypeContainer(lvalue.identifier)) {
+              this.map.set(lvalue.identifier.id, {
+                isStable: false,
+              });
+            } else if (isStableType(lvalue.identifier)) {
+              this.map.set(lvalue.identifier.id, {
+                isStable: true,
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      case 'StoreLocal': {
+        const entry = this.map.get(value.value.identifier.id);
+        if (entry) {
+          this.map.set(lvalue.identifier.id, entry);
+          this.map.set(value.lvalue.place.identifier.id, entry);
+        }
+        break;
+      }
+
+      case 'LoadLocal': {
+        const entry = this.map.get(value.place.identifier.id);
+        if (entry) {
+          this.map.set(lvalue.identifier.id, entry);
+        }
+        break;
+      }
+    }
+  }
+
+  isStable(id: IdentifierId): boolean {
+    const entry = this.map.get(id);
+    return entry != null ? entry.isStable : false;
+  }
+}
 /*
  * Infers which `Place`s are reactive, ie may *semantically* change
  * over the course of the component/hook's lifetime. Places are reactive
@@ -111,50 +204,15 @@ import {assertExhaustive} from '../Utils/utils';
  */
 export function inferReactivePlaces(fn: HIRFunction): void {
   const reactiveIdentifiers = new ReactivityMap(findDisjointMutableValues(fn));
+  const stableIdentifierSources = new StableSidemap(fn.env);
   for (const param of fn.params) {
     const place = param.kind === 'Identifier' ? param : param.place;
     reactiveIdentifiers.markReactive(place);
   }
 
-  const postDominators = computePostDominatorTree(fn, {
-    includeThrowsAsExitNode: false,
-  });
-  const postDominatorFrontierCache = new Map<BlockId, Set<BlockId>>();
-
-  function isReactiveControlledBlock(id: BlockId): boolean {
-    let controlBlocks = postDominatorFrontierCache.get(id);
-    if (controlBlocks === undefined) {
-      controlBlocks = postDominatorFrontier(fn, postDominators, id);
-      postDominatorFrontierCache.set(id, controlBlocks);
-    }
-    for (const blockId of controlBlocks) {
-      const controlBlock = fn.body.blocks.get(blockId)!;
-      switch (controlBlock.terminal.kind) {
-        case 'if':
-        case 'branch': {
-          if (reactiveIdentifiers.isReactive(controlBlock.terminal.test)) {
-            return true;
-          }
-          break;
-        }
-        case 'switch': {
-          if (reactiveIdentifiers.isReactive(controlBlock.terminal.test)) {
-            return true;
-          }
-          for (const case_ of controlBlock.terminal.cases) {
-            if (
-              case_.test !== null &&
-              reactiveIdentifiers.isReactive(case_.test)
-            ) {
-              return true;
-            }
-          }
-          break;
-        }
-      }
-    }
-    return false;
-  }
+  const isReactiveControlledBlock = createControlDominators(fn, place =>
+    reactiveIdentifiers.isReactive(place),
+  );
 
   do {
     for (const [, block] of fn.body.blocks) {
@@ -184,11 +242,12 @@ export function inferReactivePlaces(fn: HIRFunction): void {
         }
       }
       for (const instruction of block.instructions) {
+        stableIdentifierSources.handleInstruction(instruction);
         const {value} = instruction;
         let hasReactiveInput = false;
         /*
          * NOTE: we want to mark all operands as reactive or not, so we
-         * avoid short-circuting here
+         * avoid short-circuiting here
          */
         for (const operand of eachInstructionValueOperand(value)) {
           const reactive = reactiveIdentifiers.isReactive(operand);
@@ -218,7 +277,13 @@ export function inferReactivePlaces(fn: HIRFunction): void {
 
         if (hasReactiveInput) {
           for (const lvalue of eachInstructionLValue(instruction)) {
-            if (isStableType(lvalue.identifier)) {
+            /**
+             * Note that it's not correct to mark all stable-typed identifiers
+             * as non-reactive, since ternaries and other value blocks can
+             * produce reactive identifiers typed as these.
+             * (e.g. `props.cond ? setState1 : setState2`)
+             */
+            if (stableIdentifierSources.isStable(lvalue.identifier.id)) {
               continue;
             }
             reactiveIdentifiers.markReactive(lvalue);
@@ -230,6 +295,7 @@ export function inferReactivePlaces(fn: HIRFunction): void {
               case Effect.Capture:
               case Effect.Store:
               case Effect.ConditionallyMutate:
+              case Effect.ConditionallyMutateIterator:
               case Effect.Mutate: {
                 if (isMutable(instruction, operand)) {
                   reactiveIdentifiers.markReactive(operand);
@@ -244,9 +310,7 @@ export function inferReactivePlaces(fn: HIRFunction): void {
               case Effect.Unknown: {
                 CompilerError.invariant(false, {
                   reason: 'Unexpected unknown effect',
-                  description: null,
                   loc: operand.loc,
-                  suggestions: null,
                 });
               }
               default: {
@@ -264,61 +328,41 @@ export function inferReactivePlaces(fn: HIRFunction): void {
       }
     }
   } while (reactiveIdentifiers.snapshot());
-}
 
-/*
- * Computes the post-dominator frontier of @param block. These are immediate successors of nodes that
- * post-dominate @param targetId and from which execution may not reach @param block. Intuitively, these
- * are the earliest blocks from which execution branches such that it may or may not reach the target block.
- */
-function postDominatorFrontier(
-  fn: HIRFunction,
-  postDominators: PostDominator<BlockId>,
-  targetId: BlockId,
-): Set<BlockId> {
-  const visited = new Set<BlockId>();
-  const frontier = new Set<BlockId>();
-  const targetPostDominators = postDominatorsOf(fn, postDominators, targetId);
-  for (const blockId of [...targetPostDominators, targetId]) {
-    if (visited.has(blockId)) {
-      continue;
-    }
-    visited.add(blockId);
-    const block = fn.body.blocks.get(blockId)!;
-    for (const pred of block.preds) {
-      if (!targetPostDominators.has(pred)) {
-        // The predecessor does not always reach this block, we found an item on the frontier!
-        frontier.add(pred);
+  function propagateReactivityToInnerFunctions(
+    fn: HIRFunction,
+    isOutermost: boolean,
+  ): void {
+    for (const [, block] of fn.body.blocks) {
+      for (const instr of block.instructions) {
+        if (!isOutermost) {
+          for (const operand of eachInstructionOperand(instr)) {
+            reactiveIdentifiers.isReactive(operand);
+          }
+        }
+        if (
+          instr.value.kind === 'ObjectMethod' ||
+          instr.value.kind === 'FunctionExpression'
+        ) {
+          propagateReactivityToInnerFunctions(
+            instr.value.loweredFunc.func,
+            false,
+          );
+        }
+      }
+      if (!isOutermost) {
+        for (const operand of eachTerminalOperand(block.terminal)) {
+          reactiveIdentifiers.isReactive(operand);
+        }
       }
     }
   }
-  return frontier;
-}
 
-function postDominatorsOf(
-  fn: HIRFunction,
-  postDominators: PostDominator<BlockId>,
-  targetId: BlockId,
-): Set<BlockId> {
-  const result = new Set<BlockId>();
-  const visited = new Set<BlockId>();
-  const queue = [targetId];
-  while (queue.length) {
-    const currentId = queue.shift()!;
-    if (visited.has(currentId)) {
-      continue;
-    }
-    visited.add(currentId);
-    const current = fn.body.blocks.get(currentId)!;
-    for (const pred of current.preds) {
-      const predPostDominator = postDominators.get(pred) ?? pred;
-      if (predPostDominator === targetId || result.has(predPostDominator)) {
-        result.add(pred);
-      }
-      queue.push(pred);
-    }
-  }
-  return result;
+  /**
+   * Propagate reactivity for inner functions, as we eventually hoist and dedupe
+   * dependency instructions for scopes.
+   */
+  propagateReactivityToInnerFunctions(fn, true);
 }
 
 class ReactivityMap {

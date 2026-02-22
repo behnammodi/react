@@ -57,30 +57,39 @@ export function getThenableStateAfterSuspending(): ThenableState {
   return state;
 }
 
+export function getTrackedThenablesAfterRendering(): null | Array<
+  Thenable<any>,
+> {
+  return thenableState;
+}
+
 export const HooksDispatcher: Dispatcher = {
-  useMemo<T>(nextCreate: () => T): T {
-    return nextCreate();
-  },
+  readContext: (unsupportedContext: any),
+
+  use,
   useCallback<T>(callback: T): T {
     return callback;
   },
-  useDebugValue(): void {},
-  useDeferredValue: (unsupportedHook: any),
-  useTransition: (unsupportedHook: any),
-  readContext: (unsupportedContext: any),
   useContext: (unsupportedContext: any),
+  useEffect: (unsupportedHook: any),
+  useImperativeHandle: (unsupportedHook: any),
+  useLayoutEffect: (unsupportedHook: any),
+  useInsertionEffect: (unsupportedHook: any),
+  useMemo<T>(nextCreate: () => T): T {
+    return nextCreate();
+  },
   useReducer: (unsupportedHook: any),
   useRef: (unsupportedHook: any),
   useState: (unsupportedHook: any),
-  useInsertionEffect: (unsupportedHook: any),
-  useLayoutEffect: (unsupportedHook: any),
-  useImperativeHandle: (unsupportedHook: any),
-  useEffect: (unsupportedHook: any),
-  useId,
+  useDebugValue(): void {},
+  useDeferredValue: (unsupportedHook: any),
+  useTransition: (unsupportedHook: any),
   useSyncExternalStore: (unsupportedHook: any),
-  useCacheRefresh(): <T>(?() => T, ?T) => void {
-    return unsupportedRefresh;
-  },
+  useId,
+  useHostTransitionStatus: (unsupportedHook: any),
+  useFormState: (unsupportedHook: any),
+  useActionState: (unsupportedHook: any),
+  useOptimistic: (unsupportedHook: any),
   useMemoCache(size: number): Array<any> {
     const data = new Array<any>(size);
     for (let i = 0; i < size; i++) {
@@ -88,7 +97,10 @@ export const HooksDispatcher: Dispatcher = {
     }
     return data;
   },
-  use,
+  useCacheRefresh(): <T>(?() => T, ?T) => void {
+    return unsupportedRefresh;
+  },
+  useEffectEvent: (unsupportedHook: any),
 };
 
 function unsupportedHook(): void {
@@ -111,7 +123,7 @@ function useId(): string {
   }
   const id = currentRequest.identifierCount++;
   // use 'S' for Flight components to distinguish from 'R' and 'r' in Fizz/Client
-  return ':' + currentRequest.identifierPrefix + 'S' + id.toString(32) + ':';
+  return '_' + currentRequest.identifierPrefix + 'S_' + id.toString(32) + '_';
 }
 
 function use<T>(usable: Usable<T>): T {
